@@ -198,7 +198,7 @@ See `CONTRIBUTING.md`.
 
 ## Origin
 
-Formation was originally developed as part of the [MUXI Framework](https://github.com/muxi-ai/muxi) and contributed to the Agentic Spec project to establish a vendor-neutral standard for declarative AI agent systems. MUXI continues to serve as the reference implementation.
+Formation was originally developed as part of the [MUXI Stack](https://github.com/muxi-ai/muxi) and contributed to the Agentic Spec project to establish a vendor-neutral standard for declarative AI agent systems. MUXI continues to serve as the reference implementation.
 
 ---
 
