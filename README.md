@@ -42,7 +42,7 @@ Think of Agent Formation as *infrastructure-as-code for agents*.
 
 Agent Formation supports two file extensions:
 
-- **`.afs`** — Agent Formation Standard (recommended)
+- **`.afs`** — Agent Formation Schema (recommended)
 - **`.yaml`** — Standard YAML extension
 
 Both are fully supported and functionally identical. Use `.afs` for clarity in projects with multiple YAML files.
