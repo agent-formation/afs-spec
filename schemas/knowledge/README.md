@@ -11,7 +11,7 @@ Knowledge files provide agents with specialized information about your domain, p
 > [!IMPORTANT]
 > Specific file format support is implementation-dependent. We recommend runtimes support at minimum: plain text (`.txt`), Markdown (`.md`), HTML (`.html`), and PDF - as well as recursive directory scanning.
 
-At the moment, **MUXI Runtime** (the reference implementation) supports:
+At the moment, **MUXI Stack** (the reference implementation) supports:
 
 - **Documents**: PDF, Word (`.docx`), PowerPoint (`.pptx`), Excel (`.xlsx`)
 - **Text**: Plain text (`.txt`), Markdown (`.md`), HTML (`.html`)

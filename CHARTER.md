@@ -16,7 +16,7 @@ The Agent Formation project provides a **vendor-neutral, declarative configurati
 
 ### Out of scope
 
-- Specific runtime implementations (e.g., MUXI Runtime is a separate project).
+- Specific runtime implementations (e.g., MUXI Stack is a separate project).
 - Proprietary or commercial extensions.
 - Agent behavior, safety, or alignment policies (those are implementation concerns).
 

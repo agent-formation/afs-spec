@@ -63,9 +63,10 @@ Both are fully supported and functionally identical. Use `.afs` for clarity in p
 │   │   ├── local_tools.afs
 │   │   └── web_tools.afs
 │   ├── a2a/                  # Agent-to-agent service templates
-│   ├── knowledge/            # Knowledge base files directory
-│   ├── secrets.enc           # Encrypted secrets storage (example)
-│   └── secrets.example       # Example secrets template
+│   │   ├── analytics_engine.afs
+│   │   └── external_billing_service.afs
+│   └── knowledge/            # Knowledge base files directory
+│   │   └── README.md
 ├── specs/                    # Specification documents
 │   ├── formation.md          # Core standard
 │   ├── versioning.md         # Versioning policy
@@ -87,20 +88,20 @@ Both are fully supported and functionally identical. Use `.afs` for clarity in p
 
 Formation files describe **complete agent systems** with modular components:
 
-- **Formation configuration** (`formation.afs` or `formation.yaml`)  
+- **Formation configuration** (`formation.afs` or `formation.yaml`)
   Core system settings, LLM models, memory, MCP, A2A, auth, defaults.
 
-- **Agent definitions** (`agents/*.afs`)  
+- **Agent definitions** (`agents/*.afs`)
   Individual agents with roles, goals, tools, memory, and overrides.
 
-- **MCP tool servers** (`mcp/*.afs`)  
+- **MCP tool servers** (`mcp/*.afs`)
   Model Context Protocol servers providing tools/functions.
 
-- **A2A services** (`a2a/*.afs`)  
+- **A2A services** (`a2a/*.afs`)
   Agent-to-agent services and external service adapters.
 
-- **Knowledge and secrets** (`knowledge/`, `secrets`, `secrets.enc`, `.key`)  
-  Portable knowledge assets and encrypted config.
+- **Knowledge** (`knowledge/`)
+  Portable knowledge assets.
 
 ---
 
@@ -121,7 +122,7 @@ Formation files describe **complete agent systems** with modular components:
 |----------|-------------|
 | `specs/formation.md` | High-level Formation standard overview |
 | `specs/versioning.md` | Semantic versioning policy |
-| `specs/secrets.md` | Secrets encryption and interpolation |
+| `specs/secrets.md` | Secrets interpolation |
 
 ### Quick reference
 
@@ -225,6 +226,6 @@ Apache License 2.0. See `LICENSE`.
 
 ## Implementations
 
-- [**MUXI Runtime**](https://github.com/muxi-ai/muxi) — reference implementation of Agent Formation.
+- [**MUXI Stack**](https://github.com/muxi-ai/muxi) — reference implementation of Agent Formation.
 
 Other implementations are welcome.

@@ -12,8 +12,6 @@ This directory contains the canonical Agent Formation schema templates and the a
 | `mcp/` | MCP tool server templates (`local_tools.afs`, `web_tools.afs`) |
 | `a2a/` | Agent-to-agent service templates |
 | `knowledge/` | Knowledge base files directory |
-| `secrets.enc` | Encrypted secrets storage |
-| `secrets.example` | Example secrets template |
 
 ## File extensions
 

@@ -66,7 +66,7 @@ Your PR should include:
 
 Agent Formation supports two file extensions:
 
-- `.afs` — Agent Formation Standard (recommended)
+- `.afs` — Agent Formation Schema (recommended)
 - `.yaml` — Standard YAML extension
 
 Both are fully supported. Use `.afs` for clarity in projects with multiple YAML files.

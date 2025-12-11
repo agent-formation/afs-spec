@@ -15,83 +15,81 @@ This guide documents the complete schema structure for Agent Formation, includin
 
 ## 📚 Table of Contents
 
-- [Agent Formation Schema Guide](#agent-formation-schema-guide)
-  - [📋 Overview](#-overview)
-  - [📚 Table of Contents](#-table-of-contents)
-  - [🏗️ Schema Version](#️-schema-version)
-  - [📁 Formation Schema (`formation.afs`)](#-formation-schema-formationafs)
-    - [Basic Formation Information](#basic-formation-information)
-    - [Server Configuration](#server-configuration)
-    - [Input Limits Configuration](#input-limits-configuration)
-    - [LLM Configuration](#llm-configuration)
-      - [LLM Global Settings](#llm-global-settings)
-      - [LLM API Keys](#llm-api-keys)
-      - [LLM Model Capabilities](#llm-model-capabilities)
-      - [Vision Model Settings](#vision-model-settings)
-      - [Audio Model Settings](#audio-model-settings)
-      - [Video Model Settings](#video-model-settings)
-      - [Documents Model Settings](#documents-model-settings)
-    - [Overlord Configuration](#overlord-configuration)
-      - [Overlord Persona Configuration](#overlord-persona-configuration)
-      - [Overlord LLM Configuration](#overlord-llm-configuration)
-      - [Overlord Behavior Configuration](#overlord-behavior-configuration)
-      - [Overlord Clarification Configuration](#overlord-clarification-configuration)
-    - [Async Configuration](#async-configuration)
-    - [Memory Configuration](#memory-configuration)
-      - [Working Memory Configuration](#working-memory-configuration)
-      - [Buffer Memory Configuration](#buffer-memory-configuration)
-      - [Persistent Memory Configuration](#persistent-memory-configuration)
-    - [Logging Configuration](#logging-configuration)
-    - [Scheduler Configuration](#scheduler-configuration)
-    - [A2A Configuration](#a2a-configuration)
-      - [A2A General Configuration](#a2a-general-configuration)
-      - [A2A Outbound Configuration](#a2a-outbound-configuration)
-      - [A2A Inbound Configuration](#a2a-inbound-configuration)
-    - [MCP Configuration](#mcp-configuration)
-    - [Runtime Configuration](#runtime-configuration)
-    - [User Credentials Configuration](#user-credentials-configuration)
-    - [Agent Configuration](#agent-configuration)
-    - [Component Auto-Discovery](#component-auto-discovery)
-  - [👤 Agent Schema (`agents/*.afs`)](#-agent-schema-agentsafs)
-    - [Basic Agent Information](#basic-agent-information)
-    - [System Behavior Configuration](#system-behavior-configuration)
-    - [Agent-to-Agent Communication](#agent-to-agent-communication)
-    - [Model Configuration Overrides](#model-configuration-overrides)
-    - [Role and Specialization](#role-and-specialization)
-    - [Domain Knowledge Configuration](#domain-knowledge-configuration)
-    - [Agent-Specific MCP Server Access](#agent-specific-mcp-server-access)
-  - [🔧 MCP Server Schema (`mcp/*.afs`)](#-mcp-server-schema-mcpafs)
-    - [Basic MCP Server Information](#basic-mcp-server-information)
-    - [Command-Based MCP Server Configuration](#command-based-mcp-server-configuration)
-    - [HTTP-Based MCP Server Configuration](#http-based-mcp-server-configuration)
-    - [Authentication Configuration](#authentication-configuration-1)
-  - [🌐 A2A Service Schema (`a2a/*.afs`)](#-a2a-service-schema-a2aafs)
-    - [Basic A2A Service Information](#basic-a2a-service-information)
-    - [Rate Limiting Configuration](#rate-limiting-configuration)
-    - [Authentication Configuration](#authentication-configuration-2)
-  - [🔄 Override Hierarchy](#-override-hierarchy)
-    - [LLM Configuration Precedence (Highest to Lowest)](#llm-configuration-precedence-highest-to-lowest)
-    - [Example Override Flow](#example-override-flow)
-    - [MCP Server Access Rules](#mcp-server-access-rules)
-    - [API Key Resolution Order](#api-key-resolution-order)
-  - [📝 Secrets and User Credentials Interpolation](#-secrets-and-user-credentials-interpolation)
-    - [Secrets Syntax](#secrets-syntax)
-    - [User Credentials Syntax](#user-credentials-syntax)
-    - [Examples](#examples)
-  - [✅ Validation Requirements](#-validation-requirements)
-    - [Formation Validation](#formation-validation)
-    - [Agent Validation](#agent-validation)
-    - [MCP Validation](#mcp-validation)
-    - [A2A Validation](#a2a-validation)
-  - [🎯 Best Practices](#-best-practices)
-    - [Schema Compliance](#schema-compliance)
-    - [Secret Management](#secret-management)
-    - [Component Organization](#component-organization)
-    - [Override Strategy](#override-strategy)
-  - [🔍 Common Validation Errors](#-common-validation-errors)
-    - [Missing Required Fields](#missing-required-fields)
-    - [Invalid Secret References](#invalid-secret-references)
-    - [Capability Mismatches](#capability-mismatches)
+- [📋 Overview](#-overview)
+- [📚 Table of Contents](#-table-of-contents)
+- [🏗️ Schema Version](#️-schema-version)
+- [📁 Formation Schema (`formation.afs`)](#-formation-schema-formationafs)
+- [Basic Formation Information](#basic-formation-information)
+- [Server Configuration](#server-configuration)
+- [Input Limits Configuration](#input-limits-configuration)
+- [LLM Configuration](#llm-configuration)
+  - [LLM Global Settings](#llm-global-settings)
+  - [LLM API Keys](#llm-api-keys)
+  - [LLM Model Capabilities](#llm-model-capabilities)
+  - [Vision Model Settings](#vision-model-settings)
+  - [Audio Model Settings](#audio-model-settings)
+  - [Video Model Settings](#video-model-settings)
+  - [Documents Model Settings](#documents-model-settings)
+- [Overlord Configuration](#overlord-configuration)
+  - [Overlord Persona Configuration](#overlord-persona-configuration)
+  - [Overlord LLM Configuration](#overlord-llm-configuration)
+  - [Overlord Behavior Configuration](#overlord-behavior-configuration)
+  - [Overlord Clarification Configuration](#overlord-clarification-configuration)
+- [Async Configuration](#async-configuration)
+- [Memory Configuration](#memory-configuration)
+  - [Working Memory Configuration](#working-memory-configuration)
+  - [Buffer Memory Configuration](#buffer-memory-configuration)
+  - [Persistent Memory Configuration](#persistent-memory-configuration)
+- [Logging Configuration](#logging-configuration)
+- [Scheduler Configuration](#scheduler-configuration)
+- [A2A Configuration](#a2a-configuration)
+  - [A2A General Configuration](#a2a-general-configuration)
+  - [A2A Outbound Configuration](#a2a-outbound-configuration)
+  - [A2A Inbound Configuration](#a2a-inbound-configuration)
+- [MCP Configuration](#mcp-configuration)
+- [User Credentials Configuration](#user-credentials-configuration)
+- [Agent Configuration](#agent-configuration)
+- [Component Auto-Discovery](#component-auto-discovery)
+- [👤 Agent Schema (`agents/*.afs`)](#-agent-schema-agentsafs)
+- [Basic Agent Information](#basic-agent-information)
+- [System Behavior Configuration](#system-behavior-configuration)
+- [Agent-to-Agent Communication](#agent-to-agent-communication)
+- [Model Configuration Overrides](#model-configuration-overrides)
+- [Role and Specialization](#role-and-specialization)
+- [Domain Knowledge Configuration](#domain-knowledge-configuration)
+- [Agent-Specific MCP Server Access](#agent-specific-mcp-server-access)
+- [🔧 MCP Server Schema (`mcp/*.afs`)](#-mcp-server-schema-mcpafs)
+- [Basic MCP Server Information](#basic-mcp-server-information)
+- [Command-Based MCP Server Configuration](#command-based-mcp-server-configuration)
+- [HTTP-Based MCP Server Configuration](#http-based-mcp-server-configuration)
+- [Authentication Configuration](#authentication-configuration-1)
+- [🌐 A2A Service Schema (`a2a/*.afs`)](#-a2a-service-schema-a2aafs)
+- [Basic A2A Service Information](#basic-a2a-service-information)
+- [Rate Limiting Configuration](#rate-limiting-configuration)
+- [Authentication Configuration](#authentication-configuration-2)
+- [🔄 Override Hierarchy](#-override-hierarchy)
+- [LLM Configuration Precedence (Highest to Lowest)](#llm-configuration-precedence-highest-to-lowest)
+- [Example Override Flow](#example-override-flow)
+- [MCP Server Access Rules](#mcp-server-access-rules)
+- [API Key Resolution Order](#api-key-resolution-order)
+- [📝 Secrets and User Credentials Interpolation](#-secrets-and-user-credentials-interpolation)
+- [Secrets Syntax](#secrets-syntax)
+- [User Credentials Syntax](#user-credentials-syntax)
+- [Examples](#examples)
+- [✅ Validation Requirements](#-validation-requirements)
+- [Formation Validation](#formation-validation)
+- [Agent Validation](#agent-validation)
+- [MCP Validation](#mcp-validation)
+- [A2A Validation](#a2a-validation)
+- [🎯 Best Practices](#-best-practices)
+- [Schema Compliance](#schema-compliance)
+- [Secret Management](#secret-management)
+- [Component Organization](#component-organization)
+- [Override Strategy](#override-strategy)
+- [🔍 Common Validation Errors](#-common-validation-errors)
+- [Missing Required Fields](#missing-required-fields)
+- [Invalid Secret References](#invalid-secret-references)
+- [Capability Mismatches](#capability-mismatches)
 
 ## 🏗️ Schema Version
 
@@ -115,7 +113,6 @@ author: "Author Name <email@domain.com>"
 url: "https://example.com"
 license: "MIT"
 version: "1.0.0"
-runtime: "1.2"  # Runtime version constraint (exact, minor, major, or omit for latest)
 ```
 
 | Field | Required | Type | Default | Description |
@@ -127,16 +124,7 @@ runtime: "1.2"  # Runtime version constraint (exact, minor, major, or omit for l
 | `url` | ❌ No | string | None | URL for formation documentation or repository |
 | `license` | ❌ No | string | Unlicense | License type (e.g., MIT, Apache-2.0) |
 | `version` | ❌ No | string | None | Formation version using semantic versioning |
-| `runtime` | ❌ No | string | "latest" | Runtime SIF version constraint (semantic versioning) |
 
-**Runtime Version Constraints:**
-- `runtime: "1.2.3"` - Exact version (uses muxi-runtime-1.2.3)
-- `runtime: "1.2"` - Latest 1.2.x (e.g., resolves to 1.2.5)
-- `runtime: "1"` - Latest 1.x.x (e.g., resolves to 1.9.3)
-- `runtime: ""` or omitted - Absolute latest runtime version
-
-> [!NOTE]
-> When a formation is deployed, the server resolves the runtime constraint to an exact version (e.g., "1.2" → "1.2.5") and pins it. This ensures formations remain stable even when new runtime versions are released. To upgrade a formation's runtime, redeploy with an updated `runtime` field.
 
 ### Server Configuration
 *HTTP API server configuration for formation access*
@@ -159,14 +147,11 @@ server:
 | `server.host` | ❌ No | string | "0.0.0.0" | Host/IP to bind the API server to |
 | `server.port` | ❌ No | integer | 3000 | Port number for the API server |
 | `server.access_log` | ❌ No | boolean | false | Enable detailed HTTP access logging |
-| `server.api_keys.admin_key` | ❌ No | string | Auto-generated | API key for formation management operations (start/stop, agent management) |
-| `server.api_keys.client_key` | ❌ No | string | Auto-generated | API key for user interactions (chat, memories) with required `user_id` header |
+| `server.api_keys.admin_key` | ❌ No | string | Auto-generated | API key for formation management operations |
+| `server.api_keys.client_key` | ❌ No | string | Auto-generated | API key for user interactions |
 
 > [!NOTE]
-> 1. The `admin_key` should be passed as `X-Admin-Key` header for formation management endpoints
-> 2. The `client_key` should be passed as `X-Client-Key` header for user interaction endpoints
-> 3. User interaction endpoints also require `X-Muxi-User-Id` header for user identification
-> 4. If API keys are not provided, they will be auto-generated and displayed on server startup
+> API key header names and user identification headers are implementation-defined. See your runtime documentation for details.
 
 ### Input Limits Configuration
 *Input validation limits to prevent denial-of-service attacks and enforce reasonable boundaries*
@@ -291,15 +276,11 @@ agents:
 ```
 
 > [!NOTE]
-> **User Credentials**: Unlike secrets which are formation-wide and loaded at initialization, user credentials are:
-> - User-specific and isolated per user
-> - Loaded on-demand when needed
-> - Stored securely in the database credentials table
-> - Automatically trigger clarification flow if missing
-> - Cached in memory during the session for performance
-
-> [!WARNING]
-> When using user credentials, you must ensure that you have a secret stored with a similar name, to enable tool discovery upon initialization (eg. if you use `${{ user.credentials.gmail }}` in the formation, you must have a secret stored with the name `USER_CREDENTIALS_GMAIL` in the secrets store).
+> **Secrets vs User Credentials**:
+> - **Secrets** are formation-wide and loaded at initialization
+> - **User credentials** are per-user, loaded on-demand, and isolated between users
+>
+> How secrets and credentials are stored and managed is implementation-defined. See your runtime documentation for details.
 
 
 ## ✅ Validation Requirements

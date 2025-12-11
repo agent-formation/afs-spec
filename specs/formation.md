@@ -81,9 +81,9 @@ This enables concise top-level definitions with targeted specialization.
 ## 5. Secrets and environment variables
 
 - Secrets are referenced as: `${{ secrets.NAME }}`
-- Environment variables as: `${ENV_VAR}`
+- Environment variables as: `${{ env.VAR }}`
 
-Concrete storage and resolution is runtime-defined, but the syntax is standard.
+Concrete storage and resolution are runtime-defined, but the syntax is standard.
 
 ---
 

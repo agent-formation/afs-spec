@@ -1,88 +1,27 @@
 # Secrets specification
 
-This document defines how Agent Formation handles secrets storage and interpolation.
+This document defines how Agent Formation handles secrets interpolation in formation files.
 
 ---
 
 ## Overview
 
-Agent Formation uses **encrypted secrets files** to keep sensitive configuration separate from formation files. This allows formation files to be safely shared and version controlled while keeping API keys, tokens, and credentials secure.
+Formation files reference secrets using a standard syntax. This allows formation files to be safely shared and version controlled while keeping API keys, tokens, and credentials secure.
+
+> [!IMPORTANT]
+> How secrets are stored, encrypted, and managed is implementation-defined. This specification only defines the interpolation syntax and behavioral requirements.
 
 ---
 
-## File structure
+## Secrets syntax
 
-Every formation directory may contain:
+Reference secrets in formation files using:
 
-| File | Purpose | Git |
-|------|---------|-----|
-| `secrets` | Template listing secret keys (KEY=) | Commit |
-| `secrets.enc` | Encrypted key-value store | Commit |
-| `.key` | Encryption key (Fernet) | **Never commit** |
-
-```
-my-formation/
-├── formation.afs     # Safe to share (or .yaml)
-├── secrets           # Template (KEY= lines)
-├── secrets.enc       # Encrypted values
-└── .key              # Encryption key (gitignore!)
+```yaml
+key: "${{ secrets.SECRET_NAME }}"
 ```
 
----
-
-## Encryption algorithm
-
-Agent Formation uses **Fernet symmetric encryption** (from the `cryptography` library / `fernet-go`).
-
-### Fernet properties
-
-- **Algorithm**: AES-128-CBC with PKCS7 padding
-- **Authentication**: HMAC-SHA256
-- **Key size**: 256 bits (32 bytes, base64-encoded)
-- **IV**: 128 bits, randomly generated per encryption
-
-### Key generation
-
-```
-key = base64url(random_bytes(32))
-```
-
-The key is stored in `.key` with restrictive permissions (`0600`).
-
-### Encryption process
-
-1. Serialize secrets as JSON: `{"KEY": "value", ...}`
-2. Encrypt with Fernet: `fernet.encrypt(json_bytes, key)`
-3. Write ciphertext to `secrets.enc`
-
-### Decryption process
-
-1. Read ciphertext from `secrets.enc`
-2. Decrypt with Fernet: `fernet.decrypt(ciphertext, key)`
-3. Parse JSON to recover key-value map
-
----
-
-## Secrets template file
-
-The `secrets` file is a plain-text template listing all secret keys without values:
-
-```
-OPENAI_API_KEY=
-GITHUB_TOKEN=
-DATABASE_URL=
-```
-
-This file:
-- Can be committed to git (no sensitive data)
-- Documents which secrets the formation requires
-- Is auto-updated when secrets are added/removed
-
----
-
-## Referencing secrets in formation files
-
-Use the `${{ secrets.NAME }}` syntax:
+### Examples
 
 ```yaml
 llm:
@@ -93,18 +32,23 @@ mcp:
   - id: github
     env:
       GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+server:
+  api_keys:
+    admin_key: "${{ secrets.ADMIN_API_KEY }}"
 ```
 
-### Interpolation rules
+---
 
-- Pattern: `${{ secrets.NAME }}` (whitespace flexible)
-- Names are case-insensitive during lookup but normalized to `UPPER_SNAKE_CASE`
-- Missing secrets cause a validation/runtime error
-- Interpolation happens at formation load time
+## Interpolation rules
+
+### Pattern matching
+- Pattern: `${{ secrets.NAME }}` (whitespace inside braces is flexible)
+- The `$` prefix is required
+- Double braces `{{` and `}}` are required
 
 ### Name normalization
-
-Secret names are normalized to uppercase with underscores:
+Secret names SHOULD be normalized to uppercase with underscores:
 
 | Input | Normalized |
 |-------|------------|
@@ -112,102 +56,79 @@ Secret names are normalized to uppercase with underscores:
 | `openai_key` | `OPENAI_KEY` |
 | `GitHubToken` | `GITHUB_TOKEN` |
 
----
-
-## Security considerations
-
-### What to commit
-
-| File | Commit? | Reason |
-|------|---------|--------|
-| `formation.afs` | Yes | No secrets (uses interpolation) |
-| `secrets` | Yes | Keys only, no values |
-| `secrets.enc` | Yes | Encrypted, safe if key is protected |
-| `.key` | **No** | Compromises all secrets |
-
-### Best practices
-
-1. **Add `.key` to `.gitignore`** immediately
-2. **Backup `.key` securely** (password manager, vault)
-3. **Use restrictive permissions** (`chmod 600 .key`)
-4. **Never hardcode secrets** in formation files
-5. **Rotate secrets regularly** by updating `secrets.enc`
-
-### Key loss
-
-If `.key` is lost, `secrets.enc` cannot be decrypted. Recovery requires:
-1. Delete both `.key` and `secrets.enc`
-2. Regenerate the key
-3. Re-enter all secret values
+### Resolution timing
+- Secrets MUST be interpolated at formation load time
+- Missing secrets MUST cause a validation or runtime error
+- Runtimes MUST NOT proceed with unresolved secret references
 
 ---
 
-## Runtime behavior
+## User credentials
 
-At formation load time:
+In addition to formation-wide secrets, Agent Formation supports per-user credentials:
 
-1. Locate `secrets.enc` and `.key` in formation directory
-2. Decrypt secrets into memory
-3. Scan formation files for `${{ secrets.NAME }}` patterns
-4. Replace patterns with decrypted values
-5. **Never log or expose** decrypted values
-
----
-
-## Example workflow
-
-### Initialize secrets
-
-```bash
-# Creates .key and empty secrets.enc
-muxi secrets init
+```yaml
+key: "${{ user.credentials.SERVICE_NAME }}"
 ```
 
-### Add a secret
+### Differences from secrets
 
-```bash
-# Prompts for value (avoids shell history)
-muxi secrets set OPENAI_API_KEY
+| Aspect | Secrets | User Credentials |
+|--------|---------|------------------|
+| Scope | Formation-wide | Per-user |
+| Loading | At initialization | On-demand |
+| Isolation | Shared | User-isolated |
 
-# Or provide directly
-muxi secrets set OPENAI_API_KEY "sk-..."
-```
+### Example
 
-### List secrets
-
-```bash
-# Show keys only
-muxi secrets list
-
-# Show keys and values (use with caution)
-muxi secrets list --with-values
-```
-
-### Sync with formation files
-
-```bash
-# Scan .afs/.yaml files, add missing keys, remove unused
-muxi secrets sync
+```yaml
+mcp_servers:
+  - id: "github"
+    auth:
+      type: "bearer"
+      token: "${{ user.credentials.github }}"
 ```
 
 ---
 
-## Cross-runtime compatibility
+## Security requirements
 
-The Fernet format is implemented identically in:
-- **Python**: `cryptography.fernet.Fernet`
-- **Go**: `github.com/fernet/fernet-go`
+Runtimes implementing Agent Formation MUST:
 
-This ensures formations with secrets are portable across runtime implementations.
+1. **Never log or expose** decrypted secret values
+2. **Never include** secrets in error messages or stack traces
+3. **Interpolate in memory** — never write decrypted values to disk
+4. **Isolate user credentials** — one user's credentials must never be accessible to another
+
+Runtimes SHOULD:
+
+1. Support secure secret storage (encrypted at rest)
+2. Provide CLI tooling for secret management
+3. Support environment variable fallback (optional)
 
 ---
 
-## Environment variables
+## Portability
 
-Agent Formation does **not** read secrets from environment variables by default. This is intentional:
+Formation files using `${{ secrets.NAME }}` syntax are portable across any AFS-compliant runtime. The runtime is responsible for providing the secret values through its own storage mechanism.
 
-- Keeps formation files self-documenting
-- Avoids accidental exposure in logs/process lists
-- Ensures consistent behavior across environments
+Common implementation approaches include:
+- Encrypted file storage (e.g., `secrets.enc`)
+- External secret managers (HashiCorp Vault, AWS Secrets Manager)
+- Environment variables
+- Platform-specific credential stores
 
-Runtimes may optionally support environment variable fallback via extensions.
+---
+
+## Best practices
+
+1. **Use descriptive names**: `OPENAI_API_KEY` not `KEY1`
+2. **Never commit secrets**: Formation files should only contain references, not values
+3. **Document required secrets**: List all required secrets in your README
+4. **Rotate regularly**: Update secrets periodically for security
+
+---
+
+## Implementations
+
+- [**MUXI Stack**](https://github.com/muxi-ai/muxi) — Reference implementation using Fernet-encrypted file storage
