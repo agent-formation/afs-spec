@@ -1,0 +1,12 @@
+# A2A Service Configuration Schema
+schema: "1.0.0"                    # Schema version (Semantic Versioning)
+id: "analytics_engine"             # REQUIRED: Unique service identifier
+name: "Analytics Engine"           # REQUIRED: Human-readable name
+description: "External analytics and data processing service for business intelligence and reporting"  # REQUIRED
+url: "https://analytics.external.com"  # REQUIRED: Service A2A endpoint
+active: true                       # Optional: Service activation state
+
+# Authentication configuration
+auth:
+  type: "bearer"                   # Bearer token authentication
+  token: "${{ secrets.ANALYTICS_ENGINE_BEARER_TOKEN }}"

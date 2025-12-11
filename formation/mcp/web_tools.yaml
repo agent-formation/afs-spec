@@ -1,0 +1,23 @@
+# HTTP-based MCP server configuration schema
+schema: "1.0.0"                    # Schema version (Semantic Versioning)
+id: "web-tools"                    # Unique server name/id (required)
+description: "External web tools"  # Human-readable description
+active: true                       # optional; true (exists for start/stop commands)
+type: "http"                       # Server type: http (required)
+
+# Connection details
+endpoint: "https://external.com/mcp"  # Server endpoint URL (required)
+timeout_seconds: 30                # Request timeout (overrides default)
+retry_attempts: 3                  # Number of retry attempts (overrides default)
+
+# Authentication (optional)
+auth:
+  type: "bearer"                   # Auth type: bearer, basic, api_key, none
+  token: "${{ secrets.MCP_TOKEN }}"            # Auth token (for bearer)
+  # Alternative for basic auth:
+  # username: "${{ secrets.MCP_USERNAME }}"
+  # password: "${{ secrets.MCP_PASSWORD }}"
+
+  # Alternative for API key:
+  # header: "X-API-Key"
+  # key: "${{ secrets.API_KEY }}"

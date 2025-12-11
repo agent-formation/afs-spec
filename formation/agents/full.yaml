@@ -1,0 +1,79 @@
+# Agent Configuration Schema
+schema: "1.0.0"                    # Schema version (Semantic Versioning)
+id: "weather-assistant"       # Unique ID for this agent
+name: "Weather Assistant"          # Human-readable name
+description: "Specialized in providing weather forecasts and meteorological information."
+active: true                       # optional; true (exists for start/stop commands)
+
+# Optional fields
+author: "Author Name <email@domain.com>"
+url: "https://example.com"
+license: "MIT"  # Default is Unlicense
+version: "1.0.0"
+
+# System message that defines the agent's behavior
+system_message: |
+  You are a weather assistant that provides accurate forecasts and meteorological information.
+  Only answer questions related to weather. For other topics, explain that you are a
+  specialized weather assistant and cannot help with unrelated questions.
+
+# Whether the agent is discoverable internally and externally
+a2a:
+  internal: true  # default true - participates in intra-formation A2A
+  external: true  # default true - participates in external A2A (if registries configured)
+
+# Model configuration - overrides Fomarion defaults
+# Capabilities not specified here default to Fomarion settings
+llm_models:
+  - text: "openai/gpt-4o"             # Override text capability
+    api_key: "${{ secrets.AGENT_OPENAI_KEY }}"    # Agent-specific key
+    settings:
+      temperature: 0.2                # Lower temperature for factual responses
+      max_tokens: 1000
+      timeout_seconds: 30
+      max_retries: 2                  # Agent-specific retry configuration
+      fallback_model: "anthropic/claude-3.5-haiku"  # Fast, accurate fallback for weather
+
+# Role and specialties (optional)
+# Note: These can be automatically inferred from the system_message and description
+# Include them only if you want to override the automatic inference
+role: "specialist"                 # Options: "general", "specialist", "assistant", etc.
+specialties:
+  - "weather_forecasting"          # Areas this agent specializes in
+  - "meteorology"                  # These are used for routing decisions
+  - "climate_data"                 # and capability discovery
+
+# Domain knowledge (optional)
+# Enhance agent with context knowledge, allowing it to access and utilize information
+# from external sources when responding to user queries.
+# This is a list of files or directories within the formation directory.
+# During initialization, the agent will parse the files, create embeddings,
+# and store the information in its long-term, context-aware memory.
+# 
+# >>> ALL paths are relative to formation directory root (absolute paths NOT allowed) <<<
+# >>> Recommended: Keep knowledge in knowledge/ subdirectory for organization <<<
+# >>> Future: Remote sources (s3://, https://) will be supported <<<
+knowledge:
+  enabled: false  # Whether to use knowledge base
+  sources:
+  - path: "knowledge/faq/"
+    description: "Frequently asked questions about our products"
+  - path: "knowledge/products.txt"
+    description: "Information about our product catalog"
+  - path: "docs/pricing.txt"
+    description: "Pricing information (can be anywhere in formation dir)"
+
+# MCP server access (optional)
+# This should follow the same format as the MCP server schema in the mcp/ directory.
+mcp_servers:
+  - id: "weather_service"          # Must match an MCP server ID defined in formation
+    retry_attempts: 3              # Optional: Override default retry attempts
+    timeout_seconds: 30            # Optional: Override default timeout
+    description: "External weather service"  # Required: Description of the MCP server
+    active: true                   # Optional: Server activation state
+    type: "http"                   # REQUIRED: Server type ("command" or "http")
+    endpoint: "https://example.com/mcp"  # REQUIRED: Server endpoint URL
+    auth:                          # Optional: If MCP server requires authentication
+      type: "api_key"
+      header: "X-API-Key"
+      key: "${{ secrets.WEATHER_API_KEY }}"
