@@ -19,7 +19,7 @@ This directory contains the canonical Formation schema templates and the authori
 
 ```bash
 # Copy this directory as a starting point
-cp -r formation my-formation
+cp -r schemas my-formation
 cd my-formation
 
 # Edit the core configuration

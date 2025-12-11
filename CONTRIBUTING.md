@@ -53,7 +53,7 @@ If a feature is vendor-specific, put it behind the extensions mechanism.
 
 Your PR should include:
 
-- [ ] Schema updates (`formation/**`)
+- [ ] Schema updates (`schemas/**`)
 - [ ] Spec updates (`specs/**`) if behavior changes
 - [ ] Updated templates if relevant
 - [ ] Fixtures demonstrating valid/invalid cases

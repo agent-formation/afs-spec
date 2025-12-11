@@ -38,7 +38,7 @@ Think of Formation as *infrastructure-as-code for agents*.
 
 ```
 .
-├── formation/                # Canonical Formation schemas and templates
+├── schemas/                # Canonical Formation schemas and templates
 │   ├── SCHEMA_GUIDE.md       # Authoritative field reference
 │   ├── formation.yaml        # Core Formation template
 │   ├── agents/               # Agent templates
@@ -68,7 +68,7 @@ Think of Formation as *infrastructure-as-code for agents*.
 
 ## Schema families
 
-### Formation schemas (`/formation`)
+### Formation schemas (`/schemas`)
 
 Formation files describe **complete agent systems** with modular components:
 
@@ -93,7 +93,7 @@ Formation files describe **complete agent systems** with modular components:
 
 ### Start here
 
-**`formation/SCHEMA_GUIDE.md`** is the authoritative field reference:
+**`schemas/SCHEMA_GUIDE.md`** is the authoritative field reference:
 
 - Field-by-field reference
 - Override rules and precedence
@@ -112,10 +112,10 @@ Formation files describe **complete agent systems** with modular components:
 
 | Schema type | Templates | Spec section |
 |-------------|-----------|--------------|
-| Formation | `formation/formation.yaml` | SCHEMA_GUIDE |
-| Agent | `formation/agents/*.yaml` | SCHEMA_GUIDE |
-| MCP server | `formation/mcp/*.yaml` | SCHEMA_GUIDE |
-| A2A service | `formation/a2a/*.yaml` | SCHEMA_GUIDE |
+| Formation | `schemas/formation.yaml` | SCHEMA_GUIDE |
+| Agent | `schemas/agents/*.yaml` | SCHEMA_GUIDE |
+| MCP server | `schemas/mcp/*.yaml` | SCHEMA_GUIDE |
+| A2A service | `schemas/a2a/*.yaml` | SCHEMA_GUIDE |
 
 ---
 
@@ -124,7 +124,7 @@ Formation files describe **complete agent systems** with modular components:
 ### 1. Start a new Formation
 
 ```bash
-cp -r formation my-formation
+cp -r schemas my-formation
 cd my-formation
 
 nano formation.yaml
@@ -148,9 +148,9 @@ muxi validate mcp/my-tools.yaml --schema mcp
 ### 3. Add components
 
 ```bash
-cp formation/agents/minimal.yaml agents/my-agent.yaml
-cp formation/mcp/web_tools.yaml mcp/my-tools.yaml
-cp formation/a2a/analytics_engine.yaml a2a/my-service.yaml
+cp schemas/agents/minimal.yaml agents/my-agent.yaml
+cp schemas/mcp/web_tools.yaml mcp/my-tools.yaml
+cp schemas/a2a/analytics_engine.yaml a2a/my-service.yaml
 ```
 
 ---
