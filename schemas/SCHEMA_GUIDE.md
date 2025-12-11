@@ -8,7 +8,7 @@ This guide documents the complete schema structure for Agent Formation, includin
 > **Secrets Management**: Throughout all configuration files, you can reference secrets using the `${{ secrets.NAME }}` syntax. Any secrets added to your formation's secrets store can be accessed this way, providing secure handling of API keys, passwords, and other sensitive configuration values.
 
 > [!NOTE]
-> **File Extensions**: Agent Formation supports both `.afs` (Agent Formation Standard) and `.yaml` extensions. Both are fully supported and functionally identical. Examples in this guide use `.afs` but `.yaml` works the same way.
+> **File Extensions**: Agent Formation supports both `.afs` (Agent Formation Schema) and `.yaml` extensions. Both are fully supported and functionally identical. Examples in this guide use `.afs` but `.yaml` works the same way.
 
 > [!NOTE]
 > When pushing agents, formations, or MCPs to the registry, your username is automatically prepended to the component id, forming a globally unique identifier like `username/agent-id`.
