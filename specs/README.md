@@ -1,6 +1,6 @@
 # Agent Formation specifications
 
-This directory contains the normative specification documents for the Agent Formation Standard.
+This directory contains the normative specification documents for the Agent Formation Schema.
 
 ## Documents
 
