@@ -17,7 +17,7 @@ A **Formation** is a declarative description of an AI agent system. It specifies
 
 A Formation is **portable by default** and should not assume a specific runtime.
 
-Formation files use the `.afs` (Agent Formation Standard) or `.yaml` extension.
+Formation files use the `.afs` (Agent Formation Schema) or `.yaml` extension.
 
 ---
 
