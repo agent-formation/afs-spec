@@ -11,7 +11,7 @@ Agent Formation's observability system provides enterprise-grade logging with mu
 - **Per-Stream Config**: Each destination has independent level, format, events, and auth
 
 > [!NOTE]
-> **File Extensions**: Agent Formation supports both `.afs` (Agent Formation Standard) and `.yaml` extensions. Examples in this guide use `.afs` but `.yaml` works identically.
+> **File Extensions**: Agent Formation supports both `.afs` (Agent Formation Schema) and `.yaml` extensions. Examples in this guide use `.afs` but `.yaml` works identically.
 
 ## 📚 Table of Contents
 
