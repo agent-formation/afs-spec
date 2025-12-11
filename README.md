@@ -127,10 +127,10 @@ Formation files describe **complete agent systems** with modular components:
 
 | Schema type | Templates | Spec section |
 |-------------|-----------|--------------|
-| Formation | `schemas/formation.afs` | SCHEMA_GUIDE |
-| Agent | `schemas/agents/*.afs` | SCHEMA_GUIDE |
-| MCP server | `schemas/mcp/*.afs` | SCHEMA_GUIDE |
-| A2A service | `schemas/a2a/*.afs` | SCHEMA_GUIDE |
+| Formation | `schemas/formation.afs` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
+| Agent | `schemas/agents/*.afs` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
+| MCP server | `schemas/mcp/*.afs` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
+| A2A service | `schemas/a2a/*.afs` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
 
 ---
 
