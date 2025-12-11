@@ -8,7 +8,7 @@ The Agent Formation project provides a **vendor-neutral, declarative configurati
 
 ### In scope
 
-- **Agent Formation Standard (AFS)**: Core schema definitions for formations, agents, MCP tool servers, and A2A services.
+- **Agent Formation Schema (AFS)**: Core schema definitions for formations, agents, MCP tool servers, and A2A services.
 - **Specification documents**: Normative text describing schema behavior, versioning, and extension mechanisms.
 - **Conformance fixtures**: Valid and invalid test cases for validator implementations.
 - **Reference tooling**: Validator library, linter CLI, and editor extensions.
