@@ -1,6 +1,6 @@
-# Agent Formation Standard specification (draft)
+# Agent Formation Schema specification (draft)
 
-This document defines the Agent Formation Standard at a high level. The canonical schemas in `/schemas` are the source of truth.
+This document defines the Agent Formation Schema at a high level. The canonical schemas in `/schemas` are the source of truth.
 
 ---
 
