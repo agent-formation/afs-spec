@@ -1,0 +1,13 @@
+# A2A Service Configuration Schema
+schema: "1.0.0"                    # Schema version (Semantic Versioning)
+id: "external_billing_service"     # REQUIRED: Unique service identifier
+name: "External Billing Service"   # REQUIRED: Human-readable name
+description: "External billing and payment processing service for order management"  # REQUIRED
+url: "https://billing.external.com"  # REQUIRED: Service A2A endpoint
+active: true                       # Optional: Service activation state
+
+# Authentication configuration
+auth:
+  type: "api_key"                  # API key authentication
+  header: "X-API-Key"              # Header name for API key
+  key: "${{ secrets.EXTERNAL_BILLING_SERVICE_API_KEY }}"

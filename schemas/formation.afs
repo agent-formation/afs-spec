@@ -1,0 +1,552 @@
+# Formation Configuration Schema
+
+# Formation Configuration
+schema: "1.0.0" # Formation schema version (Semantic Versioning)
+id: "formation-1" # Unique identifier for this formation
+description: "Example formation" # Human-readable description
+
+# Optional fields
+author: "Author Name <email@domain.com>"
+url: "https://example.com"
+license: "MIT"  # Default is Unlicense
+version: "1.0.0"
+
+# Runtime version constraint (optional)
+runtime: "1.2"  # Latest 1.2.x (e.g., 1.2.5)
+# runtime: "1.2.3"  # Exact version
+# runtime: "1"      # Latest 1.x.x
+# runtime: ""       # Absolute latest (or omit field)
+
+# Server Configuration
+server:
+  # Server binding configuration
+  host: "0.0.0.0"   # Default: 0.0.0.0 (bind to all interfaces)
+  port: 8271        # Default: 8271
+  access_log: true  # Enable access log (default: false)
+
+  # API Keys (auto-generated if not provided)
+  api_keys:
+    admin_key: "${{ secrets.FORMATION_ADMIN_API_KEY }}"
+    # Used for formation management operations (start/stop, add/remove agents, etc.)
+    client_key: "${{ secrets.FORMATION_CLIENT_API_KEY }}"
+    # Used for user interactions (chat, memories, etc), requires user_id header
+
+# Input Validation Limits
+input_limits:
+  max_message_length: 100000        # Maximum chat message length in characters (default: 100KB)
+  max_file_size_bytes: 52428800     # Maximum file upload size in bytes (default: 50MB)
+  max_memory_entry_size: 10000      # Maximum memory entry size in characters (default: 10KB)
+  max_tool_output_size: 1048576     # Maximum tool output size in bytes (default: 1MB)
+  max_batch_items: 100              # Maximum items in batch operations (default: 100)
+
+# LLM Configuration
+llm:
+  # Global model settings
+  settings: # Default settings for all models
+    temperature: 0.7 # Default temperature (0.0-1.0)
+    max_tokens: 4096 # Default max tokens for responses
+    timeout_seconds: 30 # Default request timeout
+    max_retries: 3 # Default number of retry attempts for the same model
+    fallback_model: "anthropic/claude-3.5-sonnet" # Default fallback model if primary fails
+
+    caching:
+      enabled: true                       # Auto-enabled for cost savings
+      max_entries: 10000                  # 10x OneLLM default for multi-user
+      p: 0.95                             # 95% similarity threshold (balanced)
+      hash_only: false                    # Semantic matching enabled
+      stream_chunk_strategy: "sentences"  # Natural conversation flow
+      stream_chunk_length: 1              # One sentence at a time
+      ttl: 86400                          # 24 hours (1 day)
+
+  # API Key Configuration
+  api_keys: # Provider API keys (can be overridden)
+    openai: "${{ secrets.OPENAI_API_KEY }}" # Environment variable substitution
+    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+    # Add other providers as needed
+
+  # Model definitions by capability
+  models:
+    - text: "openai/gpt-4o" # Capability name
+      api_key: "${{ secrets.CUSTOM_LLM_API_KEY }}" # Optional override
+      settings: # Optional capability-specific settings
+        temperature: 0.7
+        max_tokens: 4096
+        timeout_seconds: 30
+        max_retries: 2 # Override: fewer retries for text model
+        fallback_model: "anthropic/claude-3.5-sonnet" # Fallback to Claude for text
+    - vision: "openai/gpt-4o" # Another capability
+      settings: # Override default
+        temperature: 0.7
+        max_tokens: 1500
+        max_retries: 1 # Vision models need fewer retries due to cost
+        fallback_model: "anthropic/claude-3.5-sonnet" # Claude has vision capability
+        image:
+          max_size_mb: 5 # Maximum image size in MB
+          preprocessing:
+            resize: true # Whether to resize large images
+            max_width: 1024 # Maximum width after resize
+            max_height: 1024 # Maximum height after resize
+    - audio: "openai/whisper-1"
+      settings:
+        max_size_mb: 10 # Maximum audio size in MB
+        language: "auto" # Language for transcription
+    - video: "google/gemini-pro-vision"
+      settings:
+        temperature: 0.3  # Lower temperature for more accurate video analysis
+        max_tokens: 2000  # More tokens for comprehensive video descriptions
+        timeout_seconds: 60  # Longer timeout for video processing
+        max_retries: 2  # Fewer retries due to processing cost
+        max_size_mb: 100  # Maximum video file size in MB
+        max_duration_seconds: 300  # Maximum video duration (5 minutes)
+        include_audio_analysis: true  # Whether to analyze audio track if present
+    - documents: "openai/gpt-4o" # For document processing
+      settings: # Override default
+        max_size_mb: 20 # Maximum document size in MB
+        extraction:
+          chunk_size: 1000 # Chunk size for extraction
+          overlap: 100 # Overlap between chunks
+          strategy: "adaptive" # Default extraction strategy
+          nlp:
+            data_path: "~/nlp_data" # Path for NLP model data (NLTK, spaCy, etc.)
+            # spacy_model: "en_core_web_sm" # Uncomment to override default spaCy model
+            # sentence_transformer: "all-MiniLM-L6-v2" # Uncomment to override default sentence transformer
+        cache_ttl_seconds: 3600 # Cache TTL for processed documents (1 hour)
+    - embedding: "openai/text-embedding-3-large"
+      settings: # Override default
+        temperature: 0.7
+        max_tokens: 4096
+        timeout_seconds: 30
+        max_retries: 5 # Embeddings are cheaper, allow more retries
+        fallback_model: "cohere/embed-english-v3.0" # Cohere embedding fallback
+    - streaming: "openai/gpt-4o-mini" # Streaming model (faster, cheaper)
+      api_key: "${{ secrets.CUSTOM_LLM_API_KEY }}" # Optional override
+      settings: # Optional capability-specific settings
+        temperature: 0.7
+        max_tokens: 4096
+        timeout_seconds: 10
+        max_retries: 0 # Override: fewer retries for streaming model
+        fallback_model: "anthropic/claude-3.5-haiku" # Fallback to Claude for streaming
+
+
+# Overlord behavior configuration
+overlord:
+  persona: |
+    You are Fynn, a helpful assistant for Company XYZ.
+    You are friendly, helpful, and professional.
+
+  # Routing model configuration
+  llm:  # Overlord-specific routing functionality
+    model: "llama_cpp/phi-3-mini-4k-instruct" # Model for task management and delegation
+    api_key: "${{ secrets.OVERLORD_LLM_API_KEY }}" # Optional override
+    max_extraction_tokens: 500  # Max tokens for media extractions when needed for routing
+                                # Content is processed intelligently by default:
+                                # - Text is extracted from media only when needed for routing
+                                # - Full content processing is delegated to specialized agents
+    settings:
+      temperature: 0.2 # Lower temperature for more consistent behavior
+      max_tokens: 2000
+      timeout_seconds: 45
+      max_retries: 1 # Overlord should fail fast for routing decisions
+      fallback_model: "openai/gpt-4o-mini" # Fast, reliable fallback for routing
+
+  caching:
+    enabled: true  # Whether to cache routing decisions (default: True)
+    ttl: 3600  # Time to live for cached routing decisions
+
+  # Response configuration
+  response:
+    format: "markdown" # Default format if not specified (options are markdown, text, html, and json)
+    widgets: true # Enable interactive UI elements like buttons, forms, charts (default: true)
+    streaming: false # Enable streaming for all synchronous responses (default: false)
+    progress: true # Enable progress visibility for all streaming responses (default: true)
+
+  # Workflow configuration (Task decomposition and orchestration)
+  workflow:
+    # Core workflow settings
+    auto_decomposition: true # Enable automatic task decomposition (default: true)
+    plan_approval_threshold: 7 # Complexity threshold for plan approval (1-10, default: 7)
+
+    # Enhanced workflow configuration (Phase 2, Stream 3)
+    complexity_method: "heuristic" # Method for complexity calculation: heuristic, llm, custom, hybrid
+    complexity_threshold: 7.0 # Complexity threshold for triggering workflows (1-10)
+    complexity_weights: # Weights for hybrid complexity calculation
+      heuristic: 0.4
+      llm: 0.4
+      custom: 0.2
+
+    # Task routing configuration
+    routing_strategy: "capability_based" # Strategy: capability_based, load_balanced, priority_based, custom, round_robin, specialized
+    enable_agent_affinity: true # Prefer agents that successfully completed similar tasks
+
+    # Error handling configuration
+    error_recovery: "retry_with_backoff" # Strategy: fail_fast, retry_with_backoff, retry_with_alternate, skip_and_continue, compensate, manual_intervention
+    retry:
+      max_attempts: 3 # Maximum retry attempts (1-10)
+      initial_delay: 1.0 # Initial retry delay in seconds
+      max_delay: 60.0 # Maximum retry delay in seconds
+      backoff_factor: 2.0 # Exponential backoff factor
+      retry_on_errors: ["timeout", "rate_limit", "temporary_failure"] # Error types to retry on
+
+    # Timeout configuration
+    timeouts:
+      task_timeout: 300 # Default timeout per task in seconds
+      workflow_timeout: 3600 # Overall workflow timeout in seconds
+      enable_adaptive_timeout: true # Adjust timeouts based on task complexity
+
+    # Execution configuration
+    parallel_execution: true # Execute independent tasks in parallel
+    max_parallel_tasks: 5 # Maximum number of tasks to execute in parallel (1-20)
+    partial_results: true # Return partial results if some tasks fail
+
+    # Global workflow timeout
+    max_timeout_seconds: 7200  # Maximum duration for entire workflow execution (default: 2 hours)
+                                # Hard ceiling to prevent runaway workflows
+                                # Workflows exceeding this limit will fail with timeout error
+
+  # Clarification configuration (always enabled for better UX)
+  clarification:
+    style: "conversational"          # Question style: conversational, formal, brief
+    max_rounds: # Safety limits - maximum clarifying questions per request
+      direct: 3       # Quick disambiguation
+      brainstorm: 10  # Creative exploration
+      planning: 7     # Requirements gathering
+      execution: 3    # Parameter clarification
+      other: 3        # Fallback for any unlisted modes
+
+# Async behavior configuration (optional)
+async:
+  threshold_seconds: 30  # Switch to async mode for requests taking longer than this (seconds)
+  enable_estimation: true  # Allow overlord to estimate processing time for smart async decisions
+  webhook_url: "https://myapp.com/webhooks/muxi?hash=${{ secrets.WEBHOOK_HASH }}"  # Default webhook URL for async completion notifications
+  webhook_retries: 3  # Number of retry attempts for webhook delivery
+  webhook_timeout: 10  # Timeout for webhook requests (seconds)
+
+
+# Memory configuration
+memory:
+  working:
+    # Shared storage backend configuration (always enabled with defaults)
+    max_memory_mb: auto # Automatically calculate based on system memory
+                        # If not set or set to auto, we default to using 10% of available RAM,
+                        # capped at 1GB, with minimum of 64 MB.
+    fifo_interval_min: 5 # FIFO cleanup interval in minutes
+    vector_dimension: 1536 # Dimension for embedding vectors
+    mode: "local" # "local" or "remote"
+    remote: # Remote buffer configuration (if mode is "remote")
+      url: "tcp://localhost:8000" # FAISSx Server URL
+      api_key: "${{ secrets.FAISSX_API_KEY }}" # Buffer API Key
+      tenant: "${{ secrets.FAISSX_TENANT_ID }}" # Buffer Tenant ID
+
+  # Buffer configuration (always enabled)
+  buffer:
+    size: 10 # Context window size
+    multiplier: 10 # Buffer multiplier (total = size * multiplier)
+    vector_search: true # Enable vector similarity search
+
+  # Persistent memory (enabled if specified)
+  persistent:
+    connection_string: "postgres://user:password@localhost:5432/dbname"
+    # Alternative: "sqlite:///data/memory.db"
+    embedding_model: "text-embedding-ada-002" # Model for embeddings (optional, overrides llm.models.embedding)
+
+    # Database query timeout (optional)
+    query_timeout_seconds: 30  # Maximum time for individual SQL queries (default: 30)
+                               # Prevents hung queries from exhausting connection pool
+                               # Applies to both sync and async database engines
+
+    # User synopsis configuration (add a brief on the user to the system message)
+    user_synopsis:
+      enabled: true # Enable user synopsis (default: true)
+      cache_ttl: 3600 # Time to live for user synopsis in seconds
+
+
+# Logging configuration
+# Log Levels
+# levels: debug, info, warn, error
+# TransportTransport Layer (HOW to send)
+# transports: stdout, file, stream, trail
+# Network Protocols (for stream transport)
+# protocols: zmq, http, kafka, tcp, udp
+# Data Formats (WHAT format)
+# formats: jsonl, text, msgpack, protobuf, datadog_json, splunk_hec,
+#          elastic_bulk, grafana_loki, newrelic_json, opentelemetry
+logging:
+  enabled: true              # Enable/disable logging entirely
+  streams:
+    # Stdout example
+    - transport: "stdout"
+      level: "info"
+      format: "jsonl"
+      events:
+        - "request.received"
+        - "overlord.routing.completed"
+        - "mcp.tool.called"
+        - "response.delivered"
+        - "error.*"
+
+    # File example
+    - transport: "file"
+      level: "debug"
+      format: "text"
+      destination: "/var/logs/formation.log"
+      events: ["*"]
+
+    # Kafka example
+    - transport: "stream"
+      destination: "kafka://broker1:9092,broker2:9092"
+      protocol: "kafka"
+      topic: "application-logs"
+      auth:
+        type: "sasl"
+        username: "${{ secrets.KAFKA_USER }}"
+        password: "${{ secrets.KAFKA_PASS }}"
+
+    # ZMQ example
+    - transport: "stream"
+      level: "info"
+      format: "jsonl"  # or msgpack/protobuf
+      destination: "tcp://server:8000/injest" # or ipc://:8000/injest
+      protocol: "zmq"
+      events: ["*"]
+      auth:
+        type: "token"
+        token: "${{ secrets.ZMQ_TOKEN }}"
+
+    # MUXI Transport (ZMQ) example - special case for MUXI
+    # Send all events to all events as msgpack to:
+    # tcps://trail.muxi.ai/injest
+    - transport: "trail"
+      token: "${{ secrets.TRAIL_TOKEN }}"
+
+    # Datadog example (http)
+    - transport: "stream"
+      protocol: "http"
+      destination: "https://http-intake.logs.datadoghq.com/v1/input/${{ secrets.DATADOG_API_KEY }}"
+      format: "datadog_json"  # Custom format that transforms fields
+
+    # Splunk example
+    - transport: "stream"
+      protocol: "http"
+      destination: "https://splunk.company.com:8088/services/collector"
+      format: "splunk_hec"    # Splunk HEC format
+      auth:
+        type: "bearer"
+        token: "${{ secrets.SPLUNK_TOKEN }}"
+
+    # Elastic example
+    - transport: "stream"
+      protocol: "http"
+      destination: "https://elastic.company.com/_bulk"
+      format: "elastic_bulk"  # Elasticsearch bulk format
+      auth:
+        type: "basic"
+        username: "${{ secrets.ELASTIC_USER }}"
+        password: "${{ secrets.ELASTIC_PASS }}"
+
+    # Grafana Loki example
+    - transport: "stream"
+      protocol: "http"
+      destination: "https://logs-prod-us-central1.grafana.net/loki/api/v1/push"
+      format: "grafana_loki"
+      auth:
+        type: "basic"
+        username: "${{ secrets.GRAFANA_USER }}"
+        password: "${{ secrets.GRAFANA_API_KEY }}"
+
+    # New Relic example
+    - transport: "stream"
+      protocol: "http"
+      destination: "https://log-api.newrelic.com/log/v1"
+      format: "newrelic_json"
+      auth:
+        type: "api_key"
+        header: "X-License-Key"
+        key: "${{ secrets.NEWRELIC_LICENSE_KEY }}"
+
+    # OpenTelemetry standard
+    - transport: "stream"
+      protocol: "http"
+      destination: "https://otlp.company.com/v1/logs"
+      format: "opentelemetry"
+      auth:
+        type: "bearer"
+        token: "${{ secrets.OTLP_TOKEN }}"
+
+# --- the "doing" part follows ---
+
+# Scheduler Configuration (optional, disabled by default)
+scheduler:
+  enabled: true                     # Enable/disable the scheduler service
+  timezone: "UTC"                   # Formation timezone for cron execution
+  check_interval_minutes: 1         # Check for due jobs every N minutes
+  max_concurrent_jobs: 10           # Maximum concurrent job executions
+  max_failures_before_pause: 3      # Auto-pause jobs after N consecutive failures
+
+# A2A Configuration (optional, enabled by default)
+a2a:
+  enabled: true  # (default - A2A is enabled if not explicitly disabled)
+
+  # Intelligent agent filtering for large formations (optional)
+  filtering:
+    enabled: false                    # Enable intelligent filtering for planning optimization
+    threshold: 50                    # Apply filtering when total agents exceed this threshold
+    always_include_threshold: 0.8    # Always include agents with confidence score above this value
+    min_relevance_score: 0.3         # Minimum relevance score for an agent to be considered
+    cache_ttl: 1800                  # Cache time-to-live in seconds for filtered results (30 minutes)
+
+  # Outbound Configuration (optional)
+  outbound:
+    enabled: true
+
+    # Startup policy for registry connections
+    # - "lenient": Log warnings and continue if registries are unreachable (default)
+    # - "strict": Fail fast if any required registry is unreachable
+    # - "retry": Retry connections for specified duration, then apply required flags
+    startup_policy: "lenient"
+
+    # Retry timeout for "retry" policy (in seconds)
+    retry_timeout_seconds: 30
+
+    # External Registries (optional)
+    # If not specified: local-only mode, no external registration/discovery
+    # If specified: enables external A2A features with server communication
+    registries:
+      # Simple format (backward compatible - all registries are optional)
+      - "https://a2a.muxihub.com"
+      - "https://agents.partner.com"
+
+      # Extended format with per-registry configuration
+      # - url: "https://critical.registry.com"
+      #   required: true                    # Fail if this registry is unreachable
+      #   health_check_timeout_seconds: 5   # Timeout for health check
+      #   retry_attempts: 5                 # Override default retry attempts
+      #
+      # - url: "https://optional.registry.com"
+      #   required: false                   # Continue without this registry
+      #   health_check_timeout_seconds: 2
+
+    # Default retry and timeout settings
+    default_retry_attempts: 3
+    default_timeout_seconds: 30
+
+    # Services configuration
+    # Initiated as an empty list or with an explicit list of services.
+    # Services found in services/ will be automatically added to the list.
+    # >>> NO NEED TO LIST SERVICES UNLESS THEY NEED AUTHENTICATION <<<
+    services: []
+
+  # Server Configuration (only relevant if registries specified)
+  inbound:
+    enabled: true
+
+    # Startup policy for registry connections (same as outbound)
+    startup_policy: "lenient"
+    retry_timeout_seconds: 30
+
+    # External Registries (optional)
+    # If not specified: local-only mode, no external registration/discovery
+    # If specified: enables external A2A features with server communication
+    registries:
+      # Simple format (backward compatible)
+      - "https://private.company.com"
+
+      # Extended format with per-registry configuration
+      # - url: "https://registry.internal.com"
+      #   required: true
+      #   health_check_timeout_seconds: 5
+
+    port: 8181
+    trusted_endpoints:                            # Trusted external endpoints
+      - "muxi.partner.com"
+    auth:
+      type: "bearer"                              # Authentication mode
+      token: "${{ secrets.A2A_BEARER_TOKEN }}"    # Authentication key
+
+
+# MCP service configuration
+mcp:
+  # Connection/retry settings (for transient failures)
+  default_retry_attempts: 3           # Retry attempts for server connection issues
+  default_timeout_seconds: 30         # Timeout per individual tool call
+
+  # Tool execution settings (for intelligent chaining)
+  max_tool_iterations: 10             # Max loops of (execute → analyze → decide)
+  max_tool_calls: 50                  # Max total individual tool calls
+  max_repeated_errors: 3              # Number of same errors before stopping
+
+  # Timeout settings
+  max_timeout_in_seconds: 300         # Total timeout for entire operation
+  max_tool_timeout_in_seconds: 30     # Timeout per individual tool call
+
+  # Message enhancement for better tool selection
+  enhance_user_prompts: true          # Use LLM to enhance ambiguous messages for tool selection
+
+  # MCP server configuration
+  # Optionally, initiate as an empty list or with an explicit list of servers.
+  # MCP servers found in mcp/ will be automatically added to the list regardless.
+  servers: []
+
+
+# Runtime configuration
+runtime:
+  # Built-in MCP configuration (optional)
+  built_in_mcps: true  # Simple mode (all on/off)
+
+  # OR granular control
+  # built_in_mcps:
+  #   - file-generation
+  #   # future tools?
+
+# User credentials configuration
+# Controls how the system handles credential requests from MCP services and tools
+user_credentials:
+  # Credential handling mode
+  mode: "redirect"  # Options: "redirect" (default) | "dynamic"
+  # redirect: Always redirect users to external credential management
+  # dynamic: Intelligently decide based on auth type and security context
+
+  # Custom message shown when redirecting credential requests
+  redirect_message: |
+    For security, credentials must be configured outside of this chat interface.
+    Please use your organization's credential management system to set up authentication.
+
+  # Optional encryption configuration for credential storage (used in dynamic mode)
+  encryption:
+    # Encryption key for credential storage
+    # If not provided, defaults to the formation_id for encryption
+    key: null
+
+    # Salt for key derivation (optional, configurable per formation)
+    # If not provided, defaults to "muxi-user-credentials-salt-v1"
+    # Each formation can use a unique salt for additional security isolation
+    salt: "muxi-user-credentials-salt-v1"
+
+  # Security settings for dynamic mode
+  require_https: true  # Require HTTPS for dynamic credential collection
+  credential_ttl_minutes: 60  # How long credentials are cached
+  max_attempts: 3  # Maximum failed authentication attempts before lockout
+
+# Example configurations:
+#
+# 1. Always redirect (production-ready):
+# user_credentials:
+#   mode: "redirect"
+#   redirect_message: "Please visit https://portal.company.com/credentials"
+#
+# 2. Dynamic collection (development only):
+# user_credentials:
+#   mode: "dynamic"
+#   encryption_key: "your-secret-key"
+#
+# 3. Custom redirect with branding:
+# user_credentials:
+#   mode: "redirect"
+#   redirect_message: |
+#     🔐 SecureCorp Policy: Credentials must be managed through our SSO portal.
+#     Visit: https://sso.securecorp.com/muxi-credentials
+#     Contact IT support if you need assistance: it@securecorp.com
+
+# Agent configuration
+# Optionally, initiate as an empty list or with an explicit list of agents.
+# Agents found in agents/ will be automatically added to the list regardless.
+agents: []

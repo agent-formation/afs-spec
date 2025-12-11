@@ -1,0 +1,17 @@
+# Command-based MCP server configuration schema
+schema: "1.0.0"                    # Schema version (Semantic Versioning)
+id: "local-tools"                  # Unique server name/id (required)
+description: "Local command tools" # Human-readable description
+active: true                       # optional; true (exists for start/stop commands)
+
+type: "command"                    # Server type: command (required)
+install: "npm install -g @modelcontextprotocol/server-json-rpc" # Optional: Command to install the server
+# Command execution details
+command: "npx"                     # Command to execute (required)
+args: ["-y", "@modelcontextprotocol/server-json-rpc"]  # Command arguments (optional)
+timeout_seconds: 60                # Command timeout (overrides default)
+
+auth:                              # Environment variables passed as arguments to the command
+  type: "env"
+  API_KEY: "${{ secrets.API_KEY }}"            # Environment variables for the command
+  DEBUG: "true"
