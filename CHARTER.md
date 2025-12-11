@@ -38,9 +38,9 @@ All contributions are made under the Apache License 2.0. Contributors must sign 
 
 ## Community
 
-- **Code of Conduct**: All participants must follow `CODE_OF_CONDUCT.md`.
-- **Contributing**: See `CONTRIBUTING.md` for how to participate.
-- **Security**: Report vulnerabilities per `SECURITY.md`.
+- **Code of Conduct**: All participants must follow [`CODE_OF_CONDUCT.md`](https://github.com/agent-formation/.github/blob/main/CODE_OF_CONDUCT.md).
+- **Contributing**: See [`CONTRIBUTING.md`](https://github.com/agent-formation/.github/blob/main/CONTRIBUTING.md) for how to participate.
+- **Security**: Report vulnerabilities per [`SECURITY.md`](https://github.com/agent-formation/.github/blob/main/SECURITY.md).
 
 ## Relationship to Linux Foundation
 

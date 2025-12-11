@@ -73,7 +73,6 @@ Both are fully supported and functionally identical. Use `.afs` for clarity in p
 │   └── secrets.md            # Secrets specification
 ├── CHARTER.md
 ├── CODE_OF_CONDUCT.md
-├── CONTRIBUTING.md
 ├── GOVERNANCE.md
 ├── MAINTAINERS.md
 ├── ROADMAP.md
@@ -208,7 +207,7 @@ This repo defines the **Agent Formation Standard**. Contributions should include
 4. Fixtures and validation coverage
 5. Compatibility checks
 
-See `CONTRIBUTING.md`.
+See [`CONTRIBUTING.md`](https://github.com/agent-formation/.github/blob/main/CONTRIBUTING.md).
 
 ---
 
