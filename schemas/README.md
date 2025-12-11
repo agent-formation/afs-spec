@@ -19,7 +19,7 @@ This directory contains the canonical Agent Formation schema templates and the a
 
 Agent Formation supports two file extensions:
 
-- **`.afs`** — Agent Formation Standard (recommended)
+- **`.afs`** — Agent Formation Schema (recommended)
 - **`.yaml`** — Standard YAML extension
 
 Both are fully supported and functionally identical.
