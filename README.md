@@ -59,6 +59,8 @@ Both are fully supported and functionally identical. Use `.afs` for clarity in p
 │   ├── agents/               # Agent templates
 │   │   ├── minimal.afs
 │   │   └── full.afs
+│   ├── skills/               # Agent skills (SKILL.md + scripts)
+│   │   └── example-skill/
 │   ├── mcp/                  # MCP tool server templates
 │   │   ├── local_tools.afs
 │   │   └── web_tools.afs
@@ -66,7 +68,7 @@ Both are fully supported and functionally identical. Use `.afs` for clarity in p
 │   │   ├── analytics_engine.afs
 │   │   └── external_billing_service.afs
 │   └── knowledge/            # Knowledge base files directory
-│   │   └── README.md
+│       └── README.md
 ├── specs/                    # Specification documents
 │   ├── formation.md          # Core standard
 │   ├── versioning.md         # Versioning policy
@@ -99,6 +101,9 @@ Formation files describe **complete agent systems** with modular components:
 - **A2A services** (`a2a/*.afs`)
   Agent-to-agent services and external service adapters.
 
+- **Skills** (`skills/`)
+  Reusable agent capabilities following the [Agent Skills specification](https://agentskills.io/specification). Each skill contains a `SKILL.md` with instructions, plus optional scripts and assets.
+
 - **Knowledge** (`knowledge/`)
   Portable knowledge assets.
 
@@ -129,6 +134,7 @@ Formation files describe **complete agent systems** with modular components:
 |-------------|-----------|--------------|
 | Formation | `schemas/formation.afs` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
 | Agent | `schemas/agents/*.afs` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
+| Skills | `schemas/skills/*/SKILL.md` | [Agent Skills Spec](https://agentskills.io/specification) |
 | MCP server | `schemas/mcp/*.afs` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
 | A2A service | `schemas/a2a/*.afs` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
 
