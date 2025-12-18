@@ -555,6 +555,36 @@ user_credentials:
 #     Visit: https://sso.securecorp.com/muxi-credentials
 #     Contact IT support if you need assistance: it@securecorp.com
 
+# Skills Configuration (optional)
+# Skills are reusable agent capabilities following the Agent Skills specification.
+# They provide instructions, scripts, and assets that agents can use.
+# Skills must be explicitly declared - they are NOT auto-discovered.
+#
+# Directory structure:
+#   skills/
+#   ├── pdf-processing/
+#   │   ├── SKILL.md        # Required: YAML frontmatter + instructions
+#   │   ├── scripts/        # Optional: executable code
+#   │   └── references/     # Optional: additional documentation
+#   └── data-analysis/
+#       └── SKILL.md
+
+# Formation-level skills - "public", available to all agents
+skills:
+  - pdf-processing
+  - data-analysis
+
+# Executor configuration for skill script execution
+executor:
+  enabled: true                        # Enable skill script execution
+  image: "muxi/executor:latest"        # Docker image (or custom)
+  port: 5560                           # ZeroMQ port
+  timeout_default: 30                  # Default script timeout (seconds)
+  restart_policy: "always"             # Container restart policy
+  resource_limits:
+    memory: "2g"                       # Memory limit
+    cpu: 1.0                           # CPU limit
+
 # Agent configuration
 # Optionally, initiate as an empty list or with an explicit list of agents.
 # Agents found in agents/ will be automatically added to the list regardless.

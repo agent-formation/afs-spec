@@ -63,6 +63,14 @@ knowledge:
   - path: "docs/pricing.txt"
     description: "Pricing information (can be anywhere in formation dir)"
 
+# Agent-specific skills (optional)
+# Skills declared here are private to this agent only.
+# The agent also has access to formation-level (public) skills.
+# Skills must exist in the skills/ directory.
+skills:
+  - ticket-handling      # Private skill for this agent
+  - customer-lookup      # Only this agent can use these
+
 # MCP server access (optional)
 # This should follow the same format as the MCP server schema in the mcp/ directory.
 mcp_servers:

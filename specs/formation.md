@@ -58,6 +58,19 @@ They can represent:
 - external APIs
 - background capabilities
 
+### 2.5 Skills
+Skills are reusable agent capabilities following the [Agent Skills specification](https://agentskills.io/specification).
+
+Each skill is a directory under `skills/` containing:
+- `SKILL.md` (required): YAML frontmatter + instructions
+- `scripts/` (optional): executable code
+- `references/` (optional): additional documentation
+- `assets/` (optional): templates, resources
+
+Skills can be declared at:
+- Formation level (public, available to all agents)
+- Agent level (private, only that agent)
+
 ---
 
 ## 3. Presence implies enablement

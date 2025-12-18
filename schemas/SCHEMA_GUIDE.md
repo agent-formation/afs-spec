@@ -48,6 +48,7 @@ This guide documents the complete schema structure for Agent Formation, includin
   - [A2A Inbound Configuration](#a2a-inbound-configuration)
 - [MCP Configuration](#mcp-configuration)
 - [User Credentials Configuration](#user-credentials-configuration)
+- [Skills Configuration](#skills-configuration)
 - [Agent Configuration](#agent-configuration)
 - [Component Auto-Discovery](#component-auto-discovery)
 - [👤 Agent Schema (`agents/*.afs`)](#-agent-schema-agentsafs)
@@ -57,6 +58,7 @@ This guide documents the complete schema structure for Agent Formation, includin
 - [Model Configuration Overrides](#model-configuration-overrides)
 - [Role and Specialization](#role-and-specialization)
 - [Domain Knowledge Configuration](#domain-knowledge-configuration)
+- [Agent-Specific Skills](#agent-specific-skills)
 - [Agent-Specific MCP Server Access](#agent-specific-mcp-server-access)
 - [🔧 MCP Server Schema (`mcp/*.afs`)](#-mcp-server-schema-mcpafs)
 - [Basic MCP Server Information](#basic-mcp-server-information)
@@ -185,6 +187,70 @@ input_limits:
 ---
 
 *Note: The complete LLM Configuration, Overlord Configuration, Memory Configuration, Logging Configuration, A2A Configuration, MCP Configuration, and other sections follow the same patterns. See the full schema reference for complete documentation.*
+
+---
+
+### Skills Configuration
+*Reusable agent capabilities following the Agent Skills specification*
+
+Skills are directories under `skills/` containing a `SKILL.md` file with YAML frontmatter and markdown instructions, plus optional `scripts/`, `references/`, and `assets/` subdirectories.
+
+```yaml
+# Formation-level skills (public, available to all agents)
+skills:
+  - pdf-processing
+  - data-analysis
+
+# Executor configuration for skill script execution
+executor:
+  enabled: true
+  image: "muxi/executor:latest"
+  port: 5560
+  timeout_default: 30
+  restart_policy: "always"
+  resource_limits:
+    memory: "2g"
+    cpu: 1.0
+```
+
+| Field | Required | Type | Default | Description |
+|-------|----------|------|---------|-------------|
+| `skills` | No | array | [] | List of skill names to load (from skills/ directory) |
+| `executor.enabled` | No | bool | true | Enable skill script execution |
+| `executor.image` | No | string | "muxi/executor:latest" | Docker image for executor |
+| `executor.port` | No | int | 5560 | ZeroMQ port for executor |
+| `executor.timeout_default` | No | int | 30 | Default script timeout (seconds) |
+| `executor.restart_policy` | No | string | "always" | Container restart policy |
+| `executor.resource_limits.memory` | No | string | "2g" | Memory limit |
+| `executor.resource_limits.cpu` | No | float | 1.0 | CPU limit |
+
+**Skill directory structure:**
+```
+skills/
+├── pdf-processing/
+│   ├── SKILL.md          # Required: YAML frontmatter + instructions
+│   ├── scripts/          # Optional: executable code
+│   ├── references/       # Optional: additional documentation
+│   └── assets/           # Optional: templates, resources
+└── data-analysis/
+    └── SKILL.md
+```
+
+### Agent-Specific Skills
+*Skills private to a specific agent (in addition to formation-level public skills)*
+
+```yaml
+skills:
+  - ticket-handling      # Private skill for this agent
+  - customer-lookup      # Only this agent can use these
+```
+
+| Field | Required | Type | Default | Description |
+|-------|----------|------|---------|-------------|
+| `skills` | No | array | [] | List of skill names private to this agent |
+
+> [!NOTE]
+> Agent-level skills are private to that agent only. The agent also has access to all formation-level (public) skills. Skills must exist in the `skills/` directory.
 
 ---
 
