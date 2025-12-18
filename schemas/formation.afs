@@ -260,117 +260,126 @@ memory:
       cache_ttl: 3600 # Time to live for user synopsis in seconds
 
 
-# Logging configuration
-# Log Levels
-# levels: debug, info, warn, error
-# TransportTransport Layer (HOW to send)
-# transports: stdout, file, stream, trail
-# Network Protocols (for stream transport)
-# protocols: zmq, http, kafka, tcp, udp
-# Data Formats (WHAT format)
-# formats: jsonl, text, msgpack, protobuf, datadog_json, splunk_hec,
-#          elastic_bulk, grafana_loki, newrelic_json, opentelemetry
+# Logging Configuration
+# ====================
+# Two-tier logging architecture:
+# - system: Infrastructure events (startup, MCP, A2A, errors) - simple stdout or file
+# - conversation: User-facing events (request lifecycle, agent activity) - full stream support
+#
+# Transport Layer (HOW to send): stdout, file, stream, trail
+# Network Protocols (for stream transport): zmq, http, kafka, tcp, udp
+# Data Formats (WHAT format): jsonl, text, msgpack, protobuf, datadog_json, splunk_hec,
+#                             elastic_bulk, grafana_loki, newrelic_json, opentelemetry
 logging:
-  enabled: true              # Enable/disable logging entirely
-  streams:
-    # Stdout example
-    - transport: "stdout"
-      level: "info"
-      format: "jsonl"
-      events:
-        - "request.received"
-        - "overlord.routing.completed"
-        - "mcp.tool.called"
-        - "response.delivered"
-        - "error.*"
+  # System events: SystemEvents, ErrorEvents, ServerEvents, APIEvents
+  # Simple configuration - stdout or file path
+  system:
+    level: "debug"           # Log level: debug, info, warning, error (default: debug)
+    destination: "stdout"    # "stdout" or file path like "/var/logs/system.log" (default: stdout)
 
-    # File example
-    - transport: "file"
-      level: "debug"
-      format: "text"
-      destination: "/var/logs/formation.log"
-      events: ["*"]
+  # Conversation events: ConversationEvents (user-facing, streamable)
+  # Full stream support with multiple destinations
+  conversation:
+    enabled: true            # Enable/disable conversation logging entirely
+    streams:
+      # Stdout example
+      - transport: "stdout"
+        level: "info"
+        format: "jsonl"
+        events:
+          - "request.received"
+          - "overlord.routing.completed"
+          - "mcp.tool.called"
+          - "response.delivered"
+          - "error.*"
 
-    # Kafka example
-    - transport: "stream"
-      destination: "kafka://broker1:9092,broker2:9092"
-      protocol: "kafka"
-      topic: "application-logs"
-      auth:
-        type: "sasl"
-        username: "${{ secrets.KAFKA_USER }}"
-        password: "${{ secrets.KAFKA_PASS }}"
+      # File example
+      - transport: "file"
+        level: "debug"
+        format: "text"
+        destination: "/var/logs/formation.log"
+        events: ["*"]
 
-    # ZMQ example
-    - transport: "stream"
-      level: "info"
-      format: "jsonl"  # or msgpack/protobuf
-      destination: "tcp://server:8000/injest" # or ipc://:8000/injest
-      protocol: "zmq"
-      events: ["*"]
-      auth:
-        type: "token"
-        token: "${{ secrets.ZMQ_TOKEN }}"
+      # Kafka example
+      - transport: "stream"
+        destination: "kafka://broker1:9092,broker2:9092"
+        protocol: "kafka"
+        topic: "application-logs"
+        auth:
+          type: "sasl"
+          username: "${{ secrets.KAFKA_USER }}"
+          password: "${{ secrets.KAFKA_PASS }}"
 
-    # MUXI Transport (ZMQ) example - special case for MUXI
-    # Send all events to all events as msgpack to:
-    # tcps://trail.muxi.ai/injest
-    - transport: "trail"
-      token: "${{ secrets.TRAIL_TOKEN }}"
+      # ZMQ example
+      - transport: "stream"
+        level: "info"
+        format: "jsonl"  # or msgpack/protobuf
+        destination: "tcp://server:8000/injest" # or ipc://:8000/injest
+        protocol: "zmq"
+        events: ["*"]
+        auth:
+          type: "token"
+          token: "${{ secrets.ZMQ_TOKEN }}"
 
-    # Datadog example (http)
-    - transport: "stream"
-      protocol: "http"
-      destination: "https://http-intake.logs.datadoghq.com/v1/input/${{ secrets.DATADOG_API_KEY }}"
-      format: "datadog_json"  # Custom format that transforms fields
+      # MUXI Transport (ZMQ) example - special case for MUXI
+      # Send all events to all events as msgpack to:
+      # tcps://trail.muxi.ai/injest
+      - transport: "trail"
+        token: "${{ secrets.TRAIL_TOKEN }}"
 
-    # Splunk example
-    - transport: "stream"
-      protocol: "http"
-      destination: "https://splunk.company.com:8088/services/collector"
-      format: "splunk_hec"    # Splunk HEC format
-      auth:
-        type: "bearer"
-        token: "${{ secrets.SPLUNK_TOKEN }}"
+      # Datadog example (http)
+      - transport: "stream"
+        protocol: "http"
+        destination: "https://http-intake.logs.datadoghq.com/v1/input/${{ secrets.DATADOG_API_KEY }}"
+        format: "datadog_json"  # Custom format that transforms fields
 
-    # Elastic example
-    - transport: "stream"
-      protocol: "http"
-      destination: "https://elastic.company.com/_bulk"
-      format: "elastic_bulk"  # Elasticsearch bulk format
-      auth:
-        type: "basic"
-        username: "${{ secrets.ELASTIC_USER }}"
-        password: "${{ secrets.ELASTIC_PASS }}"
+      # Splunk example
+      - transport: "stream"
+        protocol: "http"
+        destination: "https://splunk.company.com:8088/services/collector"
+        format: "splunk_hec"    # Splunk HEC format
+        auth:
+          type: "bearer"
+          token: "${{ secrets.SPLUNK_TOKEN }}"
 
-    # Grafana Loki example
-    - transport: "stream"
-      protocol: "http"
-      destination: "https://logs-prod-us-central1.grafana.net/loki/api/v1/push"
-      format: "grafana_loki"
-      auth:
-        type: "basic"
-        username: "${{ secrets.GRAFANA_USER }}"
-        password: "${{ secrets.GRAFANA_API_KEY }}"
+      # Elastic example
+      - transport: "stream"
+        protocol: "http"
+        destination: "https://elastic.company.com/_bulk"
+        format: "elastic_bulk"  # Elasticsearch bulk format
+        auth:
+          type: "basic"
+          username: "${{ secrets.ELASTIC_USER }}"
+          password: "${{ secrets.ELASTIC_PASS }}"
 
-    # New Relic example
-    - transport: "stream"
-      protocol: "http"
-      destination: "https://log-api.newrelic.com/log/v1"
-      format: "newrelic_json"
-      auth:
-        type: "api_key"
-        header: "X-License-Key"
-        key: "${{ secrets.NEWRELIC_LICENSE_KEY }}"
+      # Grafana Loki example
+      - transport: "stream"
+        protocol: "http"
+        destination: "https://logs-prod-us-central1.grafana.net/loki/api/v1/push"
+        format: "grafana_loki"
+        auth:
+          type: "basic"
+          username: "${{ secrets.GRAFANA_USER }}"
+          password: "${{ secrets.GRAFANA_API_KEY }}"
 
-    # OpenTelemetry standard
-    - transport: "stream"
-      protocol: "http"
-      destination: "https://otlp.company.com/v1/logs"
-      format: "opentelemetry"
-      auth:
-        type: "bearer"
-        token: "${{ secrets.OTLP_TOKEN }}"
+      # New Relic example
+      - transport: "stream"
+        protocol: "http"
+        destination: "https://log-api.newrelic.com/log/v1"
+        format: "newrelic_json"
+        auth:
+          type: "api_key"
+          header: "X-License-Key"
+          key: "${{ secrets.NEWRELIC_LICENSE_KEY }}"
+
+      # OpenTelemetry standard
+      - transport: "stream"
+        protocol: "http"
+        destination: "https://otlp.company.com/v1/logs"
+        format: "opentelemetry"
+        auth:
+          type: "bearer"
+          token: "${{ secrets.OTLP_TOKEN }}"
 
 # --- the "doing" part follows ---
 
