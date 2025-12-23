@@ -52,7 +52,7 @@ llm:
     caching:
       enabled: true                       # Auto-enabled for cost savings
       max_entries: 10000                  # 10x OneLLM default for multi-user
-      p: 0.95                             # 95% similarity threshold (balanced)
+      p: 0.98                             # 98% similarity threshold (balanced)
       hash_only: false                    # Semantic matching enabled
       stream_chunk_strategy: "sentences"  # Natural conversation flow
       stream_chunk_length: 1              # One sentence at a time
