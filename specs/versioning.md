@@ -1,8 +1,8 @@
 # Versioning policy
 
-Agent Formation follows semantic versioning: **MAJOR.MINOR.PATCH**
+Formation schemas follow semantic versioning: **MAJOR.MINOR.PATCH**
 
-Every formation file includes:
+Every Formation file includes:
 
 ```yaml
 schema: "MAJOR.MINOR.PATCH"
