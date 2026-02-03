@@ -243,10 +243,28 @@ memory:
     multiplier: 10 # Buffer multiplier (total = size * multiplier)
     vector_search: true # Enable vector similarity search
 
-  # Persistent memory (enabled if specified)
+  # Persistent memory configuration
+  # ====================
+  # Default behavior: When `persistent` is omitted, SQLite is automatically enabled
+  # with a database file created in the formation directory (memory.db).
+  #
+  # To explicitly disable persistent memory:
+  #   persistent: false
+  #
+  # To temporarily disable while preserving config (useful during development):
+  #   persistent:
+  #     enabled: false
+  #     connection_string: "postgresql://..."  # preserved for later
+  #
+  # Full configuration example:
   persistent:
-    connection_string: "postgres://user:password@localhost:5432/dbname"
-    # Alternative: "sqlite:///data/memory.db"
+    # enabled: true  # Optional - implied when persistent block exists with config
+    connection_string: "postgresql://user:password@localhost:5432/dbname"
+    # Supported formats:
+    #   - PostgreSQL: "postgresql://user:password@host:port/dbname"
+    #   - SQLite: "sqlite:///path/to/memory.db" or just "memory.db"
+    #   - Omit for default: SQLite in formation directory
+
     embedding_model: "text-embedding-ada-002" # Model for embeddings (optional, overrides llm.models.embedding)
 
     # Database query timeout (optional)

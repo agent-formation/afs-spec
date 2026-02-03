@@ -186,7 +186,107 @@ input_limits:
 
 ---
 
-*Note: The complete LLM Configuration, Overlord Configuration, Memory Configuration, Logging Configuration, A2A Configuration, MCP Configuration, and other sections follow the same patterns. See the full schema reference for complete documentation.*
+### Memory Configuration
+*Memory systems for context retention and long-term storage*
+
+Agent Formation supports three memory tiers:
+- **Working Memory**: Shared vector storage backend (always enabled)
+- **Buffer Memory**: Recent conversation context (always enabled)
+- **Persistent Memory**: Long-term storage in SQLite or PostgreSQL
+
+#### Working Memory Configuration
+
+```yaml
+memory:
+  working:
+    max_memory_mb: auto      # Auto-calculate based on system memory (10% of RAM, 64MB-1GB)
+    fifo_interval_min: 5     # FIFO cleanup interval in minutes
+    vector_dimension: 1536   # Dimension for embedding vectors
+    mode: "local"            # "local" or "remote"
+    remote:                  # Only if mode is "remote"
+      url: "tcp://localhost:8000"
+      api_key: "${{ secrets.FAISSX_API_KEY }}"
+      tenant: "${{ secrets.FAISSX_TENANT_ID }}"
+```
+
+| Field | Required | Type | Default | Description |
+|-------|----------|------|---------|-------------|
+| `memory.working.max_memory_mb` | ❌ No | int/string | "auto" | Memory limit (auto = 10% RAM, capped 64MB-1GB) |
+| `memory.working.fifo_interval_min` | ❌ No | integer | 5 | FIFO cleanup interval in minutes |
+| `memory.working.vector_dimension` | ❌ No | integer | 1536 | Embedding vector dimension |
+| `memory.working.mode` | ❌ No | string | "local" | Storage mode: "local" or "remote" |
+
+#### Buffer Memory Configuration
+
+```yaml
+memory:
+  buffer:
+    size: 10              # Context window size
+    multiplier: 10        # Buffer multiplier (total = size * multiplier)
+    vector_search: true   # Enable vector similarity search
+```
+
+| Field | Required | Type | Default | Description |
+|-------|----------|------|---------|-------------|
+| `memory.buffer.size` | ❌ No | integer | 10 | Number of recent messages in context |
+| `memory.buffer.multiplier` | ❌ No | integer | 10 | Buffer multiplier for total storage |
+| `memory.buffer.vector_search` | ❌ No | boolean | true | Enable semantic search in buffer |
+
+#### Persistent Memory Configuration
+
+Persistent memory provides long-term storage across sessions using SQLite or PostgreSQL.
+
+**Default Behavior**: When `memory.persistent` is omitted, SQLite is automatically enabled with a database file created in the formation directory (`memory.db`). This means formations have persistent memory out of the box with zero configuration.
+
+```yaml
+# Example 1: Default SQLite (recommended for single-user/development)
+# Just omit the persistent key entirely - SQLite db created automatically
+memory:
+  buffer: { size: 20 }
+  # persistent not specified = auto SQLite in formation directory
+
+# Example 2: Explicitly disable persistent memory
+memory:
+  persistent: false
+
+# Example 3: Disable but preserve config (useful during development)
+memory:
+  persistent:
+    enabled: false
+    connection_string: "postgresql://user:pass@localhost:5432/db"
+    embedding_model: "text-embedding-ada-002"
+
+# Example 4: PostgreSQL for multi-user/production
+memory:
+  persistent:
+    connection_string: "postgresql://user:password@localhost:5432/dbname"
+    embedding_model: "text-embedding-ada-002"
+    query_timeout_seconds: 30
+    user_synopsis:
+      enabled: true
+      cache_ttl: 3600
+```
+
+| Field | Required | Type | Default | Description |
+|-------|----------|------|---------|-------------|
+| `memory.persistent` | ❌ No | object/false | auto SQLite | Persistent memory config, or `false` to disable |
+| `memory.persistent.enabled` | ❌ No | boolean | true | Enable/disable (useful to preserve config while disabled) |
+| `memory.persistent.connection_string` | ❌ No | string | SQLite in formation dir | Database connection string |
+| `memory.persistent.embedding_model` | ❌ No | string | From llm.models | Model for generating embeddings |
+| `memory.persistent.query_timeout_seconds` | ❌ No | integer | 30 | Maximum time for SQL queries |
+| `memory.persistent.user_synopsis.enabled` | ❌ No | boolean | true | Add user context to system message |
+| `memory.persistent.user_synopsis.cache_ttl` | ❌ No | integer | 3600 | Synopsis cache TTL in seconds |
+
+**Connection String Formats**:
+- PostgreSQL: `postgresql://user:password@host:port/dbname`
+- SQLite (explicit): `sqlite:///path/to/memory.db` or just `memory.db`
+- Default (omit): SQLite file created as `{formation-id}.db` in formation directory
+
+> [!NOTE]
+> **Single-user vs Multi-user Mode**: SQLite backends automatically run in single-user mode (all requests use user_id "0"). For multi-user isolation with per-user memory partitions, use PostgreSQL.
+
+> [!TIP]
+> **Development Workflow**: Use `enabled: false` to temporarily disable persistent memory while preserving your PostgreSQL configuration. This is useful for debugging or testing without persistence.
 
 ---
 
