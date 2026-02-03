@@ -280,7 +280,7 @@ memory:
 **Connection String Formats**:
 - PostgreSQL: `postgresql://user:password@host:port/dbname`
 - SQLite (explicit): `sqlite:///path/to/memory.db` or just `memory.db`
-- Default (omit): SQLite file created as `{formation-id}.db` in formation directory
+- Default (omit): SQLite file created as `memory.db` in formation directory
 
 > [!NOTE]
 > **Single-user vs Multi-user Mode**: SQLite backends automatically run in single-user mode (all requests use user_id "0"). For multi-user isolation with per-user memory partitions, use PostgreSQL.
