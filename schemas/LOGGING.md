@@ -675,7 +675,7 @@ events: ["error.*", "request.*"]
 | `agent.thinking.started` | DEBUG | Agent reasoning process begins |
 | `agent.thinking.completed` | INFO | Agent reasoning finished |
 | `agent.planning.created` | INFO | Agent generates execution plan |
-| `agent.context.applied` | DEBUG | System message/persona applied |
+| `agent.context.applied` | DEBUG | System message/soul applied |
 
 ### Model Operations
 *Events for LLM API calls, inference operations, and streaming response handling*

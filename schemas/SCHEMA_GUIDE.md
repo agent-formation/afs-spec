@@ -31,7 +31,7 @@ This guide documents the complete schema structure for Agent Formation, includin
   - [Video Model Settings](#video-model-settings)
   - [Documents Model Settings](#documents-model-settings)
 - [Overlord Configuration](#overlord-configuration)
-  - [Overlord Persona Configuration](#overlord-persona-configuration)
+  - [Overlord Soul Configuration](#overlord-soul-configuration)
   - [Overlord LLM Configuration](#overlord-llm-configuration)
   - [Overlord Behavior Configuration](#overlord-behavior-configuration)
   - [Overlord Clarification Configuration](#overlord-clarification-configuration)
