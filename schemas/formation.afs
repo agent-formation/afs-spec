@@ -460,9 +460,10 @@ a2a:
     default_timeout_seconds: 30
 
     # Services configuration
-    # Initiated as an empty list or with an explicit list of services.
-    # Services found in services/ will be automatically added to the list.
-    # >>> NO NEED TO LIST SERVICES UNLESS THEY NEED AUTHENTICATION <<<
+    # List A2A service IDs to load from the a2a/ directory.
+    # Each string must match the `id` field (or filename stem) of a file in a2a/.
+    # Inline dict definitions are also supported.
+    # Only declared services are loaded -- files in a2a/ without a matching entry here are ignored.
     services: []
 
   # Server Configuration (only relevant if registries specified)

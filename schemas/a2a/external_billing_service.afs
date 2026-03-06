@@ -4,7 +4,6 @@ id: "external_billing_service"     # REQUIRED: Unique service identifier
 name: "External Billing Service"   # REQUIRED: Human-readable name
 description: "External billing and payment processing service for order management"  # REQUIRED
 url: "https://billing.external.com"  # REQUIRED: Service A2A endpoint
-active: true                       # Optional: Service activation state
 
 # Authentication configuration
 auth:
