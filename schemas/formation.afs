@@ -511,10 +511,14 @@ mcp:
   # Message enhancement for better tool selection
   enhance_user_prompts: true          # Use LLM to enhance ambiguous messages for tool selection
 
-  # MCP server configuration
-  # Optionally, initiate as an empty list or with an explicit list of servers.
-  # MCP servers found in mcp/ will be automatically added to the list regardless.
-  servers: []
+  # MCP server declarations
+  # List MCP server IDs to load from the mcp/ directory.
+  # Each string must match the `id` field (or filename stem) of a file in mcp/.
+  # Inline dict definitions are also supported for simple/flattened formations.
+  # Only declared servers are loaded -- files in mcp/ without a matching entry here are ignored.
+  servers:
+    - local-tools         # References mcp/local-tools.afs by ID
+    - web-tools           # References mcp/web-tools.afs by ID
 
 
 # Runtime configuration
@@ -606,7 +610,10 @@ executor:
     memory: "2g"                       # Memory limit
     cpu: 1.0                           # CPU limit
 
-# Agent configuration
-# Optionally, initiate as an empty list or with an explicit list of agents.
-# Agents found in agents/ will be automatically added to the list regardless.
-agents: []
+# Agent declarations
+# List agent IDs to load from the agents/ directory.
+# Each string must match the `id` field (or filename stem) of a file in agents/.
+# Inline dict definitions are also supported for simple/flattened formations.
+# Only declared agents are loaded -- files in agents/ without a matching entry here are ignored.
+agents:
+  - weather-assistant     # References agents/weather-assistant.afs by ID

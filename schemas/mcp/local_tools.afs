@@ -2,7 +2,6 @@
 schema: "1.0.0"                    # Schema version (Semantic Versioning)
 id: "local-tools"                  # Unique server name/id (required)
 description: "Local command tools" # Human-readable description
-active: true                       # optional; true (exists for start/stop commands)
 
 type: "command"                    # Server type: command (required)
 install: "npm install -g @modelcontextprotocol/server-json-rpc" # Optional: Command to install the server

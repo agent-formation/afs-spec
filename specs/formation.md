@@ -73,10 +73,28 @@ Skills can be declared at:
 
 ---
 
-## 3. Presence implies enablement
+## 3. Explicit component declaration
 
-If a block is present in a Formation, it is considered enabled unless explicitly disabled.
-This avoids redundant flags and keeps configs readable.
+Components (agents, MCP servers, A2A services) are declared explicitly in the formation file by ID.
+Files in subdirectories (`agents/`, `mcp/`, `a2a/`) are pure definitions.
+Only components listed in the formation manifest are loaded.
+
+```yaml
+agents:
+  - support-agent       # Loads agents/support-agent.yaml by ID
+  - research-agent      # Loads agents/research-agent.yaml by ID
+
+mcp:
+  servers:
+    - github-mcp        # Loads mcp/github-mcp.yaml by ID
+    - slack-mcp         # Loads mcp/slack-mcp.yaml by ID
+
+skills:
+  - pdf-processing      # Loads skills/pdf-processing/ by name
+```
+
+String entries reference files by ID. Dict entries are inline definitions.
+An empty list or omitted field means nothing is loaded for that component type.
 
 ---
 

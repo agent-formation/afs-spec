@@ -50,7 +50,7 @@ This guide documents the complete schema structure for Agent Formation, includin
 - [User Credentials Configuration](#user-credentials-configuration)
 - [Skills Configuration](#skills-configuration)
 - [Agent Configuration](#agent-configuration)
-- [Component Auto-Discovery](#component-auto-discovery)
+- [Component Declaration](#component-declaration)
 - [👤 Agent Schema (`agents/*.afs`)](#-agent-schema-agentsafs)
 - [Basic Agent Information](#basic-agent-information)
 - [System Behavior Configuration](#system-behavior-configuration)
@@ -430,15 +430,8 @@ mcp_server:
 agents:
   - id: "assistant"
     mcp_servers:
-      - id: "github"
-        auth:
-          type: "bearer"
-          token: "${{ user.credentials.github }}"  # User's personal GitHub token
-
-      - id: "gmail"
-        auth:
-          type: "oauth"
-          credentials: "${{ user.credentials.gmail }}"  # User's Gmail OAuth credentials
+      - github              # Reference formation-level MCP by ID
+      - gmail               # Reference formation-level MCP by ID
 ```
 
 > [!NOTE]
@@ -490,6 +483,8 @@ agents:
 - Use descriptive IDs: `weather-assistant` not `agent1`
 - Group related components in subdirectories
 - Keep configurations focused and minimal
+- Declare all active components explicitly in the formation file
+- Files in `agents/`, `mcp/`, `a2a/` are definitions; the formation file is the manifest
 
 ### Override Strategy
 - Use formation defaults for common settings

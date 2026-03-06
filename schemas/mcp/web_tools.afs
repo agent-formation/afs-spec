@@ -2,7 +2,6 @@
 schema: "1.0.0"                    # Schema version (Semantic Versioning)
 id: "web-tools"                    # Unique server name/id (required)
 description: "External web tools"  # Human-readable description
-active: true                       # optional; true (exists for start/stop commands)
 type: "http"                       # Server type: http (required)
 
 # Connection details

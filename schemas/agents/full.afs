@@ -3,7 +3,6 @@ schema: "1.0.0"                    # Schema version (Semantic Versioning)
 id: "weather-assistant"       # Unique ID for this agent
 name: "Weather Assistant"          # Human-readable name
 description: "Specialized in providing weather forecasts and meteorological information."
-active: true                       # optional; true (exists for start/stop commands)
 
 # Optional fields
 author: "Author Name <email@domain.com>"
@@ -72,16 +71,16 @@ skills:
   - customer-lookup      # Only this agent can use these
 
 # MCP server access (optional)
-# This should follow the same format as the MCP server schema in the mcp/ directory.
+# Reference formation-level MCP servers by ID, or define agent-private servers inline.
+# String entries reference MCP servers declared in the formation's mcp.servers list.
+# Dict entries are agent-private inline definitions (not shared with other agents).
 mcp_servers:
-  - id: "weather_service"          # Must match an MCP server ID defined in formation
-    retry_attempts: 3              # Optional: Override default retry attempts
-    timeout_seconds: 30            # Optional: Override default timeout
-    description: "External weather service"  # Required: Description of the MCP server
-    active: true                   # Optional: Server activation state
-    type: "http"                   # REQUIRED: Server type ("command" or "http")
+  - weather_service        # String = reference formation-level MCP by ID
+  - id: "agent-private-tool"          # Dict = agent-private inline definition
+    description: "Private tool for this agent only"
+    type: "http"                      # REQUIRED: Server type ("command" or "http")
     endpoint: "https://example.com/mcp"  # REQUIRED: Server endpoint URL
-    auth:                          # Optional: If MCP server requires authentication
+    auth:
       type: "api_key"
       header: "X-API-Key"
-      key: "${{ secrets.WEATHER_API_KEY }}"
+      key: "${{ secrets.PRIVATE_TOOL_KEY }}"
