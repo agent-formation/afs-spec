@@ -118,7 +118,24 @@ Concrete storage and resolution are runtime-defined, but the syntax is standard.
 
 ---
 
-## 6. Extensions
+## 6. Init hook
+
+A Formation may include an `init` field containing a shell command that the runtime executes **before** any services are initialized. This is intended for one-time environment setup: creating directories, installing packages, seeding data, setting permissions, etc.
+
+```yaml
+init: "mkdir -p /tmp/workspace && cp seed.json /tmp/workspace/"
+```
+
+Rules:
+- The command runs via the system shell (`sh -c`).
+- Working directory is the formation directory.
+- If the command exits with a non-zero status, the formation **must** fail to load.
+- Runtimes **should** impose a reasonable timeout (recommended: 120 seconds).
+- The field is optional. If omitted, no init command runs.
+
+---
+
+## 7. Extensions
 
 Agent Formation includes a standard `extensions` surface:
 
@@ -135,7 +152,7 @@ Rules:
 
 ---
 
-## 7. Backward compatibility
+## 8. Backward compatibility
 
 - Patch/minor releases are backward compatible.
 - Major releases may break compatibility and must include migration notes.

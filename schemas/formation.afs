@@ -17,6 +17,15 @@ runtime: "1.2"  # Latest 1.2.x (e.g., 1.2.5)
 # runtime: "1"      # Latest 1.x.x
 # runtime: ""       # Absolute latest (or omit field)
 
+# Init hook (optional)
+# Shell command executed before services are initialized.
+# Use for environment setup: creating directories, installing tools, seeding data.
+# Runs with cwd set to the formation directory. Non-zero exit fails the formation.
+init: "mkdir -p /tmp/workspace"
+# init: |
+#   mkdir -p /tmp/workspace /tmp/cache
+#   cp seed-data.json /tmp/workspace/
+
 # Server Configuration
 server:
   # Server binding configuration
