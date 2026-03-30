@@ -505,6 +505,15 @@ a2a:
 
 # MCP service configuration
 mcp:
+  # Connection lifecycle
+  connection_ttl: 300                 # Seconds to keep idle connections alive (default: 300)
+                                      # After tool discovery, connections are closed. On the first
+                                      # tool call the connection is re-established and kept alive.
+                                      # Each subsequent call resets the TTL. Connections idle longer
+                                      # than this value are closed by a background reaper.
+                                      # Set to 0 for ephemeral connections (connect/execute/disconnect
+                                      # per call, legacy behavior).
+
   # Connection/retry settings (for transient failures)
   default_retry_attempts: 3           # Retry attempts for server connection issues
   default_timeout_seconds: 30         # Timeout per individual tool call

@@ -8,6 +8,7 @@ type: "http"                       # Server type: http (required)
 endpoint: "https://external.com/mcp"  # Server endpoint URL (required)
 timeout_seconds: 30                # Request timeout (overrides default)
 retry_attempts: 3                  # Number of retry attempts (overrides default)
+connection_ttl: 600                # Idle TTL override for this server (overrides mcp.connection_ttl)
 
 # Authentication (optional)
 auth:
