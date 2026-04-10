@@ -14,3 +14,11 @@ auth:                              # Environment variables passed as arguments t
   type: "env"
   API_KEY: "${{ secrets.API_KEY }}"            # Environment variables for the command
   DEBUG: "true"
+
+# Default parameters (optional)
+# Key-value pairs injected into every tool call on this server.
+# Useful for org-wide constants (e.g. a fixed drive ID, tenant ID, project key)
+# so the LLM never has to infer or propagate infrastructure values.
+# Supports secret interpolation. Caller-provided values always take precedence.
+# parameters:
+#   projectId: "${{ secrets.PROJECT_ID }}"

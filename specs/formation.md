@@ -50,6 +50,8 @@ They may be:
 - remote HTTP-based
 - hosted elsewhere
 
+Each server supports an optional `parameters` field: a flat key-value map of default values injected into every tool call. This is intended for infrastructure constants (org-level IDs, tenant keys) that should never be left to LLM inference. Values support `${{ secrets.X }}` interpolation. Caller-provided values always take precedence.
+
 ### 2.4 A2A services
 A2A services define agent-to-agent and external service communication.
 

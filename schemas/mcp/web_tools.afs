@@ -21,3 +21,12 @@ auth:
   # Alternative for API key:
   # header: "X-API-Key"
   # key: "${{ secrets.API_KEY }}"
+
+# Default parameters (optional)
+# Key-value pairs injected into every tool call on this server.
+# Useful for org-wide constants (e.g. a fixed drive ID, tenant ID, project key)
+# so the LLM never has to infer or propagate infrastructure values.
+# Supports secret interpolation. Caller-provided values always take precedence.
+parameters:
+  driveId: "${{ secrets.ORG_DRIVE_ID }}"
+  # tenantId: "${{ secrets.TENANT_ID }}"

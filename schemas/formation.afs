@@ -539,6 +539,12 @@ mcp:
     - local-tools         # References mcp/local-tools.afs by ID
     - web-tools           # References mcp/web-tools.afs by ID
 
+    # Inline example with default parameters:
+    # - id: "ms365-mcp"
+    #   url: "https://mcp.example.com/ms365"
+    #   parameters:                         # Injected into every tool call on this server
+    #     driveId: "${{ secrets.ORG_DRIVE_ID }}"
+
 
 # Runtime configuration
 runtime:

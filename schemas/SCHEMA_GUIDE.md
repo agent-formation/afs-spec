@@ -461,6 +461,26 @@ agents:
 - ✅ Command servers must have `command`
 - ✅ HTTP servers must have `endpoint`
 - ✅ Auth configurations must be complete
+- ✅ `parameters` (if present) must be a flat key-value map
+
+### MCP Default Parameters
+
+MCP servers support an optional `parameters` field: a flat key-value map injected into every tool call on that server. This removes infrastructure constants (org drive IDs, tenant IDs, project keys) from agent prompts and LLM inference, making tool execution deterministic.
+
+```yaml
+# mcp/ms365-mcp.afs
+schema: "1.0.0"
+id: ms365-mcp
+type: http
+endpoint: "https://mcp.example.com/ms365"
+parameters:
+  driveId: "${{ secrets.ORG_DRIVE_ID }}"
+```
+
+Rules:
+- Values support secret interpolation (`${{ secrets.X }}`)
+- Caller-provided values always take precedence over defaults
+- Parameters are injected at execution time, not during planning
 
 ### A2A Validation
 - ✅ Must have `schema`, `id`, `url`
