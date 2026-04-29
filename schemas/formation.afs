@@ -83,23 +83,6 @@ llm:
         timeout_seconds: 30
         max_retries: 2 # Override: fewer retries for text model
         fallback_model: "anthropic/claude-3.5-sonnet" # Fallback to Claude for text
-    - synthesis: "anthropic/claude-haiku-4-5" # Optional: faster/cheaper model for tool-result synthesis
-      # The synthesis stage produces the final user-visible reply after tool calls
-      # have completed. It does not need to plan or reason about which tools to
-      # invoke (that already happened during the planning stage), so a smaller
-      # and faster model usually suffices and shaves wall-clock time off agent
-      # responses that involve any tool execution.
-      #
-      # If `synthesis` is omitted, agents fall back to `text` for synthesis —
-      # behavior identical to pre-`synthesis` formations. This capability is
-      # purely additive; existing formations are not affected.
-      api_key: "${{ secrets.CUSTOM_LLM_API_KEY }}" # Optional override
-      settings: # Same shape and options as text — every field below is optional
-        temperature: 0.7
-        max_tokens: 4096
-        timeout_seconds: 30
-        max_retries: 2
-        fallback_model: "openai/gpt-4o-mini" # If the synthesis model fails, fall back here
     - vision: "openai/gpt-4o" # Another capability
       settings: # Override default
         temperature: 0.7
@@ -163,20 +146,71 @@ overlord:
     You are Fynn, a helpful assistant for Company XYZ.
     You are friendly, helpful, and professional.
 
-  # Routing model configuration
-  llm:  # Overlord-specific routing functionality
-    model: "llama_cpp/phi-3-mini-4k-instruct" # Model for task management and delegation
-    api_key: "${{ secrets.OVERLORD_LLM_API_KEY }}" # Optional override
+  # Overlord LLM configuration
+  #
+  # The overlord runs two distinct LLM stages, each configurable
+  # independently:
+  #
+  #   * `base` — the routing / task-management / delegation model.
+  #     Picks which agent handles a request, decomposes complex
+  #     requests into workflows, extracts media for routing context,
+  #     and runs other pre-planning gates that don't already use the
+  #     local prototype-similarity classifier.
+  #
+  #   * `synthesis` — the model that takes completed task results and
+  #     produces the final user-visible reply. This is the LAST LLM
+  #     call in a workflow turn and the one whose latency the user
+  #     feels most directly.
+  #
+  # Inheritance lattice:
+  #
+  #     overlord.llm.synthesis  →  overlord.llm.base  →  llm.models[text]
+  #
+  # `synthesis` is optional: when omitted, the overlord uses `base`
+  # for both stages. `base` is also optional: when omitted, the
+  # overlord uses the formation-level `llm.models[text]` for both
+  # stages. This means a minimal formation can ship without any
+  # `overlord.llm` block at all and still work — you only configure
+  # what you want to override.
+  #
+  # `max_extraction_tokens` is a routing-pipeline knob, not a model
+  # setting, so it lives at the parent `overlord.llm` level rather
+  # than inside `base` or `synthesis`.
+  #
+  # BREAKING CHANGE: Earlier formations used a flat shape with
+  # `overlord.llm.model`, `overlord.llm.api_key`, etc. as direct
+  # children. That shape is no longer accepted; move those fields
+  # into a nested `base:` block. There is no compat shim — formations
+  # that haven't migrated will fail validation with a clear error
+  # message pointing at the old field name.
+  llm:
     max_extraction_tokens: 500  # Max tokens for media extractions when needed for routing
                                 # Content is processed intelligently by default:
                                 # - Text is extracted from media only when needed for routing
                                 # - Full content processing is delegated to specialized agents
-    settings:
-      temperature: 0.2 # Lower temperature for more consistent behavior
-      max_tokens: 2000
-      timeout_seconds: 45
-      max_retries: 1 # Overlord should fail fast for routing decisions
-      fallback_model: "openai/gpt-4o-mini" # Fast, reliable fallback for routing
+
+    base:                       # Routing / task-management / delegation model
+      model: "llama_cpp/phi-3-mini-4k-instruct"
+      api_key: "${{ secrets.OVERLORD_LLM_API_KEY }}" # Optional override
+      settings:
+        temperature: 0.2 # Lower temperature for more consistent behavior
+        max_tokens: 2000
+        timeout_seconds: 45
+        max_retries: 1 # Overlord should fail fast for routing decisions
+        fallback_model: "openai/gpt-4o-mini" # Fast, reliable fallback for routing
+
+    synthesis:                  # OPTIONAL — workflow-result synthesis model.
+                                # Defaults to `base` when omitted. Use a smaller/
+                                # faster model here when you want quick replies
+                                # without giving up the routing model's accuracy.
+      model: "anthropic/claude-haiku-4-5"
+      api_key: "${{ secrets.OVERLORD_SYNTHESIS_API_KEY }}" # Optional override
+      settings:                 # Same shape and options as `base.settings` — every field below is optional
+        temperature: 0.7
+        max_tokens: 4096
+        timeout_seconds: 30
+        max_retries: 2
+        fallback_model: "openai/gpt-4o-mini" # Fast fallback for synthesis
 
   caching:
     enabled: true  # Whether to cache routing decisions (default: True)

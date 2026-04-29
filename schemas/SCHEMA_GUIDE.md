@@ -358,8 +358,94 @@ skills:
 
 ### LLM Configuration Precedence (Highest to Lowest)
 1. **Agent-specific model overrides** (`agents/*.afs` → `llm_models:`)
-2. **Overlord LLM configuration** (`formation.afs` → `overlord.llm`)
-3. **Formation default LLM settings** (`formation.afs` → `llm:`)
+2. **Overlord LLM configuration** (`formation.afs` → `overlord.llm.{base,synthesis}`)
+3. **Formation default LLM settings** (`formation.afs` → `llm.models[text]`)
+
+### Overlord LLM stages: `base` and `synthesis`
+
+The overlord runs two distinct LLM stages:
+
+* **`base`** — routing / task management / delegation. Picks which
+  agent handles a request, decomposes complex requests into
+  workflows, extracts media for routing context.
+* **`synthesis`** — final user-visible reply produced from completed
+  task results. This is the last LLM call in a workflow turn and
+  the one whose latency the user feels most directly.
+
+Both are configured under `overlord.llm` with identical option
+shapes:
+
+```yaml
+overlord:
+  llm:
+    max_extraction_tokens: 500          # routing-pipeline knob (parent-level)
+
+    base:
+      model: "llama_cpp/phi-3-mini-4k-instruct"
+      api_key: "${{ secrets.OVERLORD_LLM_API_KEY }}"
+      settings:
+        temperature: 0.2
+        max_tokens: 2000
+        timeout_seconds: 45
+        max_retries: 1
+        fallback_model: "openai/gpt-4o-mini"
+
+    synthesis:                          # OPTIONAL — defaults to `base` when omitted
+      model: "anthropic/claude-haiku-4-5"
+      settings:
+        temperature: 0.7
+        max_tokens: 4096
+        timeout_seconds: 30
+        max_retries: 2
+        fallback_model: "openai/gpt-4o-mini"
+```
+
+### Resolution lattice
+
+```
+overlord.llm.synthesis   →   overlord.llm.base   →   llm.models[text]
+```
+
+* If `overlord.llm.synthesis` is **set**, the overlord uses it for the
+  workflow synthesis stage.
+* If `overlord.llm.synthesis` is **omitted**, the overlord uses
+  `overlord.llm.base` for synthesis as well.
+* If `overlord.llm.base` is **also omitted**, the overlord uses the
+  formation-level `llm.models[text]` for both stages.
+
+This means a minimal formation can ship without any `overlord.llm`
+block and still work — you only configure what you want to
+override.
+
+### BREAKING: flat `overlord.llm` shape removed
+
+Earlier formations placed `model:`, `api_key:`, and `settings:` as
+direct children of `overlord.llm:`. That flat shape is no longer
+accepted. Move those fields into a nested `base:` block:
+
+```yaml
+# ❌ Old (flat) — no longer accepted
+overlord:
+  llm:
+    model: "..."
+    api_key: "..."
+    max_extraction_tokens: 500
+    settings: { ... }
+
+# ✅ New (nested)
+overlord:
+  llm:
+    max_extraction_tokens: 500           # peer of base/synthesis
+    base:
+      model: "..."
+      api_key: "..."
+      settings: { ... }
+    synthesis: { ... }                   # optional
+```
+
+There is no compatibility shim — formations that have not migrated
+will fail validation with an error pointing at the old field
+location.
 
 ### Example Override Flow
 ```yaml
@@ -372,17 +458,22 @@ llm:
     - text: "openai/gpt-4o"
 
 overlord:
-  routing:
-    settings:
-      temperature: 0.2      # Overrides 0.7 for routing
-      max_tokens: 2000      # Overrides 1000 for routing
+  llm:
+    base:
+      settings:
+        temperature: 0.2    # Overrides 0.7 for routing
+        max_tokens: 2000    # Overrides 4096 for routing
+    synthesis:
+      model: "anthropic/claude-haiku-4-5"   # Faster model for the user-visible reply
+      settings:
+        temperature: 0.5    # Overrides 0.7 for synthesis only
 
 # agents/my_agent.afs - Agent overrides
 llm_models:
   - text: "anthropic/claude-3-opus"
     settings:
       temperature: 0.1      # Overrides 0.7 for this agent
-      max_tokens: 1500      # Overrides 1000 for this agent
+      max_tokens: 1500      # Overrides 4096 for this agent
 ```
 
 ### MCP Server Access Rules
@@ -544,46 +635,13 @@ models:
 # ✅ Valid
 models:
   - text: "openai/gpt-4o"
-  - synthesis: "anthropic/claude-haiku-4-5"   # optional, falls back to text
   - vision: "openai/gpt-4o"
 ```
 
-### Synthesis Capability (Optional Performance Tuning)
-The `synthesis` capability is an optional sibling of `text` that lets formations
-route the **post-tool-call response synthesis** stage through a smaller / faster
-model than the planning stage. The shape and option set are identical to `text`:
-
-```yaml
-models:
-  - text: "anthropic/claude-sonnet-4-6"
-    api_key: "${{ secrets.ANTHROPIC_API_KEY }}"
-    settings:
-      temperature: 0.7
-      max_tokens: 4096
-      timeout_seconds: 30
-      max_retries: 2
-      fallback_model: "anthropic/claude-3.5-sonnet"
-
-  - synthesis: "anthropic/claude-haiku-4-5"   # same shape as text — every option below is optional
-    api_key: "${{ secrets.ANTHROPIC_API_KEY }}"
-    settings:
-      temperature: 0.7
-      max_tokens: 4096
-      timeout_seconds: 30
-      max_retries: 2
-      fallback_model: "openai/gpt-4o-mini"
-```
-
-**Behavior:**
-- `synthesis` is consulted **only** when an agent finishes tool execution and
-  needs to produce the user-visible reply. The planning stage (deciding which
-  tools to invoke) always uses `text`.
-- If `synthesis` is **omitted**, agents fall back to `text` — identical to
-  pre-`synthesis` behavior. Existing formations are not affected.
-- Agent-level `llm_models` overrides apply to `synthesis` the same way they
-  apply to `text`.
-- All keys (`api_key`, `settings.*`) are optional and inherit from the
-  formation-level `llm.settings` defaults when omitted, exactly as `text` does.
+> **Note**: To configure a separate model for response synthesis, use
+> `overlord.llm.synthesis` (see "Overlord LLM stages: `base` and
+> `synthesis`" above). Synthesis is an overlord-stage concern, not a
+> capability of the formation-level `llm.models` list.
 
 ---
 
