@@ -544,8 +544,46 @@ models:
 # ✅ Valid
 models:
   - text: "openai/gpt-4o"
+  - synthesis: "anthropic/claude-haiku-4-5"   # optional, falls back to text
   - vision: "openai/gpt-4o"
 ```
+
+### Synthesis Capability (Optional Performance Tuning)
+The `synthesis` capability is an optional sibling of `text` that lets formations
+route the **post-tool-call response synthesis** stage through a smaller / faster
+model than the planning stage. The shape and option set are identical to `text`:
+
+```yaml
+models:
+  - text: "anthropic/claude-sonnet-4-6"
+    api_key: "${{ secrets.ANTHROPIC_API_KEY }}"
+    settings:
+      temperature: 0.7
+      max_tokens: 4096
+      timeout_seconds: 30
+      max_retries: 2
+      fallback_model: "anthropic/claude-3.5-sonnet"
+
+  - synthesis: "anthropic/claude-haiku-4-5"   # same shape as text — every option below is optional
+    api_key: "${{ secrets.ANTHROPIC_API_KEY }}"
+    settings:
+      temperature: 0.7
+      max_tokens: 4096
+      timeout_seconds: 30
+      max_retries: 2
+      fallback_model: "openai/gpt-4o-mini"
+```
+
+**Behavior:**
+- `synthesis` is consulted **only** when an agent finishes tool execution and
+  needs to produce the user-visible reply. The planning stage (deciding which
+  tools to invoke) always uses `text`.
+- If `synthesis` is **omitted**, agents fall back to `text` — identical to
+  pre-`synthesis` behavior. Existing formations are not affected.
+- Agent-level `llm_models` overrides apply to `synthesis` the same way they
+  apply to `text`.
+- All keys (`api_key`, `settings.*`) are optional and inherit from the
+  formation-level `llm.settings` defaults when omitted, exactly as `text` does.
 
 ---
 

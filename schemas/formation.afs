@@ -83,6 +83,23 @@ llm:
         timeout_seconds: 30
         max_retries: 2 # Override: fewer retries for text model
         fallback_model: "anthropic/claude-3.5-sonnet" # Fallback to Claude for text
+    - synthesis: "anthropic/claude-haiku-4-5" # Optional: faster/cheaper model for tool-result synthesis
+      # The synthesis stage produces the final user-visible reply after tool calls
+      # have completed. It does not need to plan or reason about which tools to
+      # invoke (that already happened during the planning stage), so a smaller
+      # and faster model usually suffices and shaves wall-clock time off agent
+      # responses that involve any tool execution.
+      #
+      # If `synthesis` is omitted, agents fall back to `text` for synthesis —
+      # behavior identical to pre-`synthesis` formations. This capability is
+      # purely additive; existing formations are not affected.
+      api_key: "${{ secrets.CUSTOM_LLM_API_KEY }}" # Optional override
+      settings: # Same shape and options as text — every field below is optional
+        temperature: 0.7
+        max_tokens: 4096
+        timeout_seconds: 30
+        max_retries: 2
+        fallback_model: "openai/gpt-4o-mini" # If the synthesis model fails, fall back here
     - vision: "openai/gpt-4o" # Another capability
       settings: # Override default
         temperature: 0.7
