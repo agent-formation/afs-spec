@@ -22,3 +22,16 @@ auth:                              # Environment variables passed as arguments t
 # Supports secret interpolation. Caller-provided values always take precedence.
 # parameters:
 #   projectId: "${{ secrets.PROJECT_ID }}"
+
+# Tool filtering (optional)
+# Restrict the upstream tool catalog at registration time. Use exactly one
+# of whitelist or blacklist (declaring both is a load-time error).
+# Patterns are POSIX fnmatch globs; literals match exactly.
+# tools:
+#   blacklist:
+#     - "delete_*"          # keep destructive verbs out of the planning prompt
+#     - "shell_exec"
+#   # Alternatively, narrow the surface to a known set:
+#   # whitelist:
+#   #   - "read_file"
+#   #   - "list_directory"

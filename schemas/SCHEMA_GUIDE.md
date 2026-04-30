@@ -65,6 +65,8 @@ This guide documents the complete schema structure for Agent Formation, includin
 - [Command-Based MCP Server Configuration](#command-based-mcp-server-configuration)
 - [HTTP-Based MCP Server Configuration](#http-based-mcp-server-configuration)
 - [Authentication Configuration](#authentication-configuration-1)
+- [MCP Default Parameters](#mcp-default-parameters)
+- [MCP Tool Filtering](#mcp-tool-filtering)
 - [🌐 A2A Service Schema (`a2a/*.afs`)](#-a2a-service-schema-a2aafs)
 - [Basic A2A Service Information](#basic-a2a-service-information)
 - [Rate Limiting Configuration](#rate-limiting-configuration)
@@ -553,6 +555,7 @@ agents:
 - ✅ HTTP servers must have `endpoint`
 - ✅ Auth configurations must be complete
 - ✅ `parameters` (if present) must be a flat key-value map
+- ✅ `tools` (if present) must declare exactly one of `whitelist` or `blacklist`, each a non-empty list of strings
 
 ### MCP Default Parameters
 
@@ -572,6 +575,61 @@ Rules:
 - Values support secret interpolation (`${{ secrets.X }}`)
 - Caller-provided values always take precedence over defaults
 - Parameters are injected at execution time, not during planning
+
+### MCP Tool Filtering
+
+MCP servers support an optional `tools` block that scopes the upstream tool catalog at registration time. Useful when:
+
+- The upstream server exposes many more tools than agents in this formation actually need (cuts the per-turn planning prompt that lists every tool's JSON schema).
+- Destructive verbs (`delete_*`, `force_push_*`, `merge_*`) should be kept out of the LLM's plannable surface entirely.
+- A multi-product MCP server should be exposed as if it were a single-surface server.
+
+```yaml
+# mcp/github-mcp.afs
+schema: "1.0.0"
+id: github-mcp
+type: http
+endpoint: "https://api.githubcopilot.com/mcp/"
+auth:
+  type: bearer
+  token: "${{ secrets.GITHUB_PAT }}"
+
+tools:
+  whitelist:               # mutually exclusive with blacklist
+    - "search_*"           # fnmatch globs (* ? [...])
+    - "get_*"
+    - "issue_*"
+    - "add_issue_comment"  # literal names match exactly
+    - "create_or_update_file"
+```
+
+Or, equivalently, allow everything except destructive ops:
+
+```yaml
+tools:
+  blacklist:
+    - "delete_*"
+    - "force_push_branch"
+    - "merge_pull_request"
+```
+
+Pattern semantics (POSIX `fnmatch`):
+
+| Token       | Matches                                              |
+|-------------|------------------------------------------------------|
+| `*`         | any run of characters (including empty)              |
+| `?`         | exactly one character                                |
+| `[abc]`     | one character from a set                             |
+| `[!abc]`    | one character NOT in the set                         |
+| no metachar | literal name match (exact, case-sensitive)           |
+
+Rules:
+- Exactly one of `whitelist` or `blacklist` per server (declaring both is a load-time error).
+- Patterns are case-sensitive and match against the upstream MCP tool's `name` field.
+- An empty list (`whitelist: []`) is a load-time warning — no filter is applied.
+- A pattern that matches **zero** upstream tools surfaces a warning with `difflib`-style "did you mean?" suggestions for literal patterns.
+- A post-filter set that contains **zero** tools is a clean skip: the server is **not** registered, agents that reference it get no tools from this source, and a warning is emitted. This is by design — operators may legitimately disable a server via filter — but no agent receives tools from a server whose filter excluded everything.
+- The filter runs at registration time, between `tools/list` discovery and registry insertion. It does not affect tool execution; tools that pass the filter behave identically to an unfiltered registration.
 
 ### A2A Validation
 - ✅ Must have `schema`, `id`, `url`

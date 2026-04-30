@@ -30,3 +30,19 @@ auth:
 parameters:
   driveId: "${{ secrets.ORG_DRIVE_ID }}"
   # tenantId: "${{ secrets.TENANT_ID }}"
+
+# Tool filtering (optional)
+# Restrict the upstream tool catalog at registration time. Use exactly one
+# of whitelist or blacklist (declaring both is a load-time error).
+# Patterns are POSIX fnmatch globs; literals match exactly. Reduces the
+# per-turn planning prompt for catalogs the agent only partially needs.
+tools:
+  whitelist:
+    - "search_*"            # any tool whose name starts with search_
+    - "get_*"
+    - "list_*"
+    - "create_or_update_file"  # literal name, exact match
+  # Alternatively, allow-everything-except destructive verbs:
+  # blacklist:
+  #   - "delete_*"
+  #   - "force_push_branch"

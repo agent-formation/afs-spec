@@ -52,6 +52,8 @@ They may be:
 
 Each server supports an optional `parameters` field: a flat key-value map of default values injected into every tool call. This is intended for infrastructure constants (org-level IDs, tenant keys) that should never be left to LLM inference. Values support `${{ secrets.X }}` interpolation. Caller-provided values always take precedence.
 
+Each server also supports an optional `tools` block (`whitelist` OR `blacklist`, mutually exclusive) that scopes the upstream tool catalog at registration time. Patterns are POSIX `fnmatch` globs (`*`, `?`, `[...]`); names without metacharacters match literally. This narrows the per-turn planning prompt to the tools the formation actually uses and lets operators keep destructive verbs out of the LLM's plannable surface entirely.
+
 ### 2.4 A2A services
 A2A services define agent-to-agent and external service communication.
 
