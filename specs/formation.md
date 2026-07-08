@@ -35,6 +35,17 @@ Contains:
 - auth / security if required
 - component references
 
+#### 2.1.1 Overlord soul (`SOUL.md`)
+
+The overlord's persona (identity, tone, values) comes from a **soul document**, auto-discovered by fixed filename next to the formation file. Runtimes **must** resolve the soul in this precedence order:
+
+1. `SOUL.md` next to the formation file
+2. `soul.md` next to the formation file
+3. the inline `overlord.soul` field in the formation file
+4. the runtime's built-in default persona
+
+The first source found wins; the rest are ignored. The document's content is used verbatim (no templating). Soul is overlord-only — individual agents do not accept a soul document (see §2.2).
+
 ### 2.2 Agents
 Agents are declared under `agents/` and referenced by the Formation.
 
@@ -44,13 +55,8 @@ Each agent includes:
 - tool access
 - memory bindings
 - overrides
-- an optional `soul:` document (see §2.2.1)
 
-#### 2.2.1 Agent soul documents
-
-An agent may declare `soul: <relative path>` pointing at a markdown document inside the formation directory. The document's content is prepended verbatim to the agent's system message (no templating). A missing soul file **must** be a load-time error, not a silent skip.
-
-This is distinct from the formation-level overlord soul (`SOUL.md` next to the formation file, or the inline `overlord.soul` field), which defines the orchestrator's persona.
+Agents are single-file contained: an agent's character and persona live in its `system_message`. There is no per-agent soul document — soul is an overlord-level concept only (see §2.1.1).
 
 ### 2.3 MCP tool servers
 MCP servers provide tools to agents.

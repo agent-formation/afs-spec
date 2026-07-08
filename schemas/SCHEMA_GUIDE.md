@@ -328,6 +328,29 @@ Rules:
 
 ---
 
+### Overlord Soul Configuration
+*The orchestrator's persona (identity, tone, values)*
+
+```yaml
+# formation.afs — inline fallback; a SOUL.md file next to this file wins
+overlord:
+  soul: |
+    You are Fynn, a helpful assistant for Company XYZ.
+```
+
+The soul is auto-discovered by fixed filename next to the formation file. Resolution precedence (first match wins):
+
+1. `SOUL.md` next to the formation file
+2. `soul.md` next to the formation file
+3. inline `overlord.soul`
+4. runtime built-in default persona
+
+Rules:
+- The soul document content is used verbatim (no templating).
+- Soul is **overlord-only**. Agents are single-file contained — an agent's character lives in its `system_message`; there is no per-agent `soul` field.
+
+---
+
 ### Memory Configuration
 *Memory systems for context retention and long-term storage*
 
@@ -599,24 +622,6 @@ skills:
 
 > [!NOTE]
 > Agent-level skills are private to that agent only. The agent also has access to all formation-level (public) skills. Skills must exist in the `skills/` directory.
-
-### Agent Soul Documents
-*Per-agent identity documents prepended to the system message*
-
-```yaml
-# agents/my-assistant.afs
-soul: "./SOUL.md"    # relative path, resolved inside the formation directory
-```
-
-| Field | Required | Type | Default | Description |
-|-------|----------|------|---------|-------------|
-| `soul` | ❌ No | string | None | Relative path to a markdown soul document; content is prepended verbatim to the agent's system message |
-
-Rules:
-- The path must resolve **inside** the formation directory (same confinement as knowledge paths).
-- A missing file is a **load-time error**, not a silent skip.
-- No templating is applied to the content.
-- Distinct from the overlord-level soul (`SOUL.md` next to the formation file, or `overlord.soul`), which defines the orchestrator persona.
 
 ---
 
@@ -969,7 +974,7 @@ agents:
 - ✅ Model overrides must use valid capabilities
 - ✅ MCP server references must exist
 - ✅ Knowledge paths must be valid
-- ✅ `soul` (if present) must resolve to an existing file inside the formation directory
+- ✅ Must not declare a `soul` field (soul is overlord-only; agent character lives in `system_message`)
 
 ### MCP Validation
 - ✅ Must have `schema`, `id`, `type`

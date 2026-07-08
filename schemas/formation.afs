@@ -158,8 +158,10 @@ llm:
 
 # Overlord behavior configuration
 # NOTE: The overlord's soul (identity, tone, values) can also be defined in a
-# SOUL.md file next to this formation file. If SOUL.md (or soul.md) exists,
-# it takes precedence over the inline `soul` field below.
+# SOUL.md file next to this formation file, auto-discovered by fixed filename.
+# Precedence: SOUL.md > soul.md > the inline `soul` field below > the runtime's
+# built-in default. Soul is overlord-only; agents have no soul field — an
+# agent's character lives in its system_message.
 overlord:
   soul: |
     You are Fynn, a helpful assistant for Company XYZ.
