@@ -12,6 +12,10 @@ This directory contains the canonical Agent Formation schema templates and the a
 | `skills/` | Agent skills directory (SKILL.md files with scripts, references, assets) |
 | `mcp/` | MCP tool server templates (`local_tools.afs`, `web_tools.afs`) |
 | `a2a/` | Agent-to-agent service templates |
+| `sops/` | SOP templates (markdown + frontmatter; auto-discovered) |
+| `triggers/` | Trigger templates (markdown + frontmatter; auto-discovered) |
+| `transformers/` | Outbound payload transformer templates (auto-discovered) |
+| `groups/` | Access-control group templates (auto-discovered; requires `server.auth: required`) |
 | `knowledge/` | Knowledge base files directory |
 
 ## File extensions

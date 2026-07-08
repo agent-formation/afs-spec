@@ -10,6 +10,13 @@ url: "https://example.com"
 license: "MIT"  # Default is Unlicense
 version: "1.0.0"
 
+# Soul document (optional)
+# Relative path (inside the formation directory) to a markdown document that
+# is prepended VERBATIM to this agent's system message (no templating).
+# A missing file is a load-time error. Distinct from the overlord-level
+# SOUL.md / overlord.soul, which defines the orchestrator persona.
+soul: "./SOUL.md"
+
 # System message that defines the agent's behavior
 system_message: |
   You are a weather assistant that provides accurate forecasts and meteorological information.
@@ -84,3 +91,12 @@ mcp_servers:
       type: "api_key"
       header: "X-API-Key"
       key: "${{ secrets.PRIVATE_TOOL_KEY }}"
+    # Optional tool filter -- same block and semantics as the formation-level
+    # MCP registry filter (exactly one of whitelist/blacklist, fnmatch globs).
+    # Scopes this agent's default tool surface for the private server at
+    # registration time. See SCHEMA_GUIDE.md "MCP Tool Filtering" and
+    # "The Tool Override Cascade".
+    tools:
+      whitelist:
+        - "search_*"
+        - "get_*"

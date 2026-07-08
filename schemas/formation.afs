@@ -33,6 +33,14 @@ server:
   port: 8271        # Default: 8271
   access_log: true  # Enable access log (default: false)
 
+  # Access control mode (default: open)
+  # - open:     any user can interact with the formation
+  # - required: only users present in the runtime's user database can interact;
+  #             unknown users are rejected across all channels.
+  # A groups/ directory containing group files REQUIRES auth: required
+  # (open + groups is a load-time validation error). See schemas/groups/.
+  auth: "open"
+
   # API Keys (auto-generated if not provided)
   api_keys:
     admin_key: "${{ secrets.FORMATION_ADMIN_API_KEY }}"
@@ -72,6 +80,17 @@ llm:
     openai: "${{ secrets.OPENAI_API_KEY }}" # Environment variable substitution
     anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
     # Add other providers as needed
+
+  # Semantic model aliases (optional)
+  # Map alias names to fully qualified provider/model strings. Aliases are
+  # accepted anywhere a model: reference is (agent llm_models, SOP / trigger /
+  # skill frontmatter model:, SOP step [model:x] directives). Alias names must
+  # match [a-zA-Z0-9_-]+ and must NOT collide with capability names (text,
+  # vision, audio, video, documents, embedding, streaming). The most specific
+  # reference wins -- see SCHEMA_GUIDE.md "Model Selection Hierarchy".
+  aliases:
+    fast: "openai/gpt-4o-mini"
+    premium: "anthropic/claude-sonnet-4-5"
 
   # Model definitions by capability
   models:
@@ -341,6 +360,22 @@ memory:
       cache_ttl: 3600 # Time to live for user synopsis in seconds
 
 
+# Artifacts configuration (optional)
+# Artifact capture is ON BY DEFAULT -- omitting this block still yields local
+# artifact storage with the defaults below. Set enabled: false to opt out.
+artifacts:
+  enabled: true                 # default: true
+  storage:
+    type: "local"               # v1: "local" only (s3 and other backends are
+                                # rejected at load; reserved for a later minor)
+    path: "./artifacts"         # default; relative to the formation directory
+  encryption:
+    enabled: true               # default: true
+  retention:
+    policy: "last_accessed"     # "last_accessed" (default) | "last_updated"
+    duration: 0                 # days; 0 = keep forever (default)
+
+
 # Logging Configuration
 # ====================
 # Two-tier logging architecture:
@@ -471,6 +506,48 @@ scheduler:
   check_interval_minutes: 1         # Check for due jobs every N minutes
   max_concurrent_jobs: 10           # Maximum concurrent job executions
   max_failures_before_pause: 3      # Auto-pause jobs after N consecutive failures
+
+# Proactive messaging configuration (optional)
+# Declares outbound notification channels and an optional autonomous heartbeat.
+# Channels reference transformers by name (formation transformers/ directory
+# first, then the runtime's bundled slack/telegram/discord/email templates).
+proactive:
+  channels:
+    slack:
+      transformer: slack                    # transformer name (no path)
+      url: "${{ secrets.SLACK_WEBHOOK }}"   # optional; overrides the transformer's
+                                            # endpoint.url. REQUIRED at load time if
+                                            # the transformer declares no URL itself.
+  default_channel: slack      # optional fallback: channel name or literal "webhook"
+                              # (routing: explicit channel > user preference >
+                              #  default_channel > async.webhook_url)
+  heartbeat:
+    enabled: true             # default true when the block is present.
+                              # REQUIRES scheduler.enabled: true (load-time check).
+    interval: "30m"           # duration string (Ns / Nm / Nh); default 30m
+    target: "last"            # last | preferred | webhook | <channel name>
+                              # ("last", "preferred", "webhook" are reserved and
+                              #  cannot be used as channel names)
+    active_hours:             # optional; absent = always active
+      start: "09:00"          # 24-hour HH:MM
+      end: "18:00"            # start > end wraps past midnight
+      timezone: "UTC"         # IANA name, or literal "user" for per-user timezones
+      weekends: true          # default true; false suppresses Sat/Sun
+    sop: "my-heartbeat"       # optional formation SOP replacing the runtime's
+                              # bundled default heartbeat SOP (must exist at load)
+    instruction: "Focus on today's prep"  # optional; appended to the heartbeat prompt
+
+# Commands configuration (optional)
+# Opt-in slash-command surface. Resolution order: aliases -> formation SOPs
+# by name (a formation SOP SHADOWS a built-in of the same name) -> built-in
+# registry (reference set: setup, help, status, jobs, identity, channels,
+# preferences, reset).
+commands:
+  enabled: true               # default true when the block is present
+  aliases:
+    tasks: jobs               # /tasks resolves like /jobs
+  builtin:
+    reset: false              # hide the built-in /reset (unknown names fail validation)
 
 # A2A Configuration (optional, enabled by default)
 a2a:
@@ -674,6 +751,12 @@ user_credentials:
 skills:
   - pdf-processing
   - data-analysis
+
+# Alternative mapping form: load formation skills AND disable named built-in
+# skills that the runtime would otherwise load automatically (e.g. compute):
+# skills:
+#   names: [pdf-processing, data-analysis]
+#   disable_builtin: [compute]
 
 # Executor configuration for skill script execution
 executor:
