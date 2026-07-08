@@ -62,7 +62,7 @@ They may be:
 
 Each server supports an optional `parameters` field: a flat key-value map of default values injected into every tool call. This is intended for infrastructure constants (org-level IDs, tenant keys) that should never be left to LLM inference. Values support `${{ secrets.X }}` interpolation. Caller-provided values always take precedence.
 
-Each server also supports an optional `tools` block (`whitelist` OR `blacklist`, mutually exclusive) that scopes the upstream tool catalog at registration time. Patterns are POSIX `fnmatch` globs (`*`, `?`, `[...]`); names without metacharacters match literally. This narrows the per-turn planning prompt to the tools the formation actually uses and lets operators keep destructive verbs out of the LLM's plannable surface entirely.
+Each server also supports an optional `tools` block (`allow` and/or `deny`; `whitelist`/`blacklist` are accepted aliases) that scopes the upstream tool catalog at registration time. `allow` alone keeps only matching tools; `deny` alone keeps everything except matching tools; both together apply allow first and then subtract deny (deny wins on overlap). Patterns are POSIX `fnmatch` globs (`*`, `?`, `[...]`); names without metacharacters match literally. This narrows the per-turn planning prompt to the tools the formation actually uses and lets operators keep destructive verbs out of the LLM's plannable surface entirely.
 
 **Registry is not grant.** The formation-level `mcp.servers` list defines connections and prunes tool catalogs; capability flows to an agent only via that agent's `mcp_servers` attachment. Declaring a server at the formation level does not by itself put its tools on any agent's surface.
 
@@ -326,16 +326,18 @@ Sections: `agents`, `mcp_servers`, `triggers`, `sops`, `native_apps`, `memory.wr
 
 Tool control is one concern appearing at four levels; the most specific level wins:
 
-| Level | Vocabulary | Role |
-|-------|-----------|------|
-| Formation `mcp.servers[].tools` | `whitelist` / `blacklist` (exactly one) | Hard catalog bound — pruned at registration; nothing below can resurrect a pruned tool |
-| Agent-level MCP definition `tools` | `whitelist` / `blacklist` (exactly one) | The agent's default tool surface for an agent-private server (same block, applied at that agent's registration) |
+| Level | Keys | Role |
+|-------|------|------|
+| Formation `mcp.servers[].tools` | `allow` / `deny` (either or both) | Hard catalog bound — pruned at registration; nothing below can resurrect a pruned tool |
+| Agent `mcp_servers` attachment `tools` | `allow` / `deny` (either or both) | The agent's default tool surface for that server — on an inline (agent-private) definition or on a `{id, tools}` reference to a formation-declared server; applied after the registry bound |
 | Group `mcp_servers.<id>.tools` | `allow` / `deny` (either or both) | Group-wide override for that server, across all granted agents |
 | Group `agents.<agent>.<id>.tools` | `allow` / `deny` (either or both) | Most specific: this group, this agent, this server |
 
+An agent's `mcp_servers` entry may be a plain string (attach the formation-declared server as-is), a `{id, tools}` mapping (attach it with a narrowing override), or a full inline definition (agent-private server, optionally with its own `tools` block). Attachment-level `tools` blocks chain **after** the registry bound: they select from the already-pruned catalog, so an attachment can narrow the agent's view but never resurrect a registry-pruned tool.
+
 Group override semantics: if a group provides a `tools:` block at some level, it **supersedes** the inherited block; otherwise the inherited config applies unchanged. Within a block: `allow` alone = exactly this set (expanded against the post-registry catalog, so a group override may supersede — not merely intersect — the agent's inherited view); `deny` alone = inherited minus these; both = allow-then-subtract. `tools: {deny: "*"}` hides a server from a group entirely.
 
-Note the vocabulary split: registry- and agent-level blocks use `whitelist`/`blacklist` with a strict one-of-the-two rule; group-level blocks use `allow`/`deny` and permit both together (deny applies after allow). The keys are not interchangeable across levels.
+The vocabulary is uniform across all four levels: `allow`/`deny`, either or both, with deny applied after allow (deny wins on overlap). A single string pattern is accepted wherever a list is (the `deny: "*"` idiom). At the registry and attachment levels, `whitelist`/`blacklist` are accepted as aliases of `allow`/`deny`; declaring a canonical key together with its own alias in one block (`allow` + `whitelist`, or `deny` + `blacklist`) is a load-time error. Group blocks accept the canonical keys only.
 
 ### 5.4 Design principle: tool granularity is the permission granularity
 

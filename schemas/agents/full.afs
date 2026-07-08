@@ -80,9 +80,16 @@ skills:
 # MCP server access (optional)
 # Reference formation-level MCP servers by ID, or define agent-private servers inline.
 # String entries reference MCP servers declared in the formation's mcp.servers list.
-# Dict entries are agent-private inline definitions (not shared with other agents).
+# {id, tools} entries reference a formation-level server and narrow its tool
+# surface for this agent (the override chains after the registry-level filter;
+# it can never resurrect a registry-pruned tool).
+# Other dict entries are agent-private inline definitions (not shared with other agents).
 mcp_servers:
   - weather_service        # String = reference formation-level MCP by ID
+  - id: github-mcp         # Reference-with-override: formation-level MCP by ID...
+    tools:                 # ...with an agent-level tool filter on top
+      deny:
+        - "merge_*"
   - id: "agent-private-tool"          # Dict = agent-private inline definition
     description: "Private tool for this agent only"
     type: "http"                      # REQUIRED: Server type ("command" or "http")
@@ -92,11 +99,12 @@ mcp_servers:
       header: "X-API-Key"
       key: "${{ secrets.PRIVATE_TOOL_KEY }}"
     # Optional tool filter -- same block and semantics as the formation-level
-    # MCP registry filter (exactly one of whitelist/blacklist, fnmatch globs).
+    # MCP registry filter (allow and/or deny, deny applied after allow;
+    # whitelist/blacklist accepted as aliases; fnmatch globs).
     # Scopes this agent's default tool surface for the private server at
     # registration time. See SCHEMA_GUIDE.md "MCP Tool Filtering" and
     # "The Tool Override Cascade".
     tools:
-      whitelist:
+      allow:
         - "search_*"
         - "get_*"

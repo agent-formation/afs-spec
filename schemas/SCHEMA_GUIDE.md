@@ -258,15 +258,17 @@ Tool control is one concern appearing at four levels; the most specific level wi
 
 | Level | Keys | Role |
 |-------|------|------|
-| Formation `mcp.servers[].tools` | `whitelist` / `blacklist` (exactly one) | Hard catalog bound — pruned at registration; nothing below can resurrect a pruned tool |
-| Agent-level MCP definition `tools` | `whitelist` / `blacklist` (exactly one) | The agent's default tool surface for an agent-private server |
+| Formation `mcp.servers[].tools` | `allow` / `deny` (either or both) | Hard catalog bound — pruned at registration; nothing below can resurrect a pruned tool |
+| Agent `mcp_servers` attachment `tools` | `allow` / `deny` (either or both) | The agent's default tool surface for that server — on an inline (agent-private) definition or on a `{id, tools}` reference to a formation-declared server; applied after the registry bound |
 | Group `mcp_servers.<id>.tools` | `allow` / `deny` (either or both) | Group-wide override for that server, across all granted agents |
 | Group `agents.<agent>.<id>.tools` | `allow` / `deny` (either or both) | Most specific: this group, this agent, this server |
+
+An agent's `mcp_servers` entry may be a plain string (attach the formation-declared server as-is), a `{id, tools}` mapping (attach it with a narrowing override), or a full inline definition (agent-private server, optionally with its own `tools` block). Attachment-level `tools` blocks chain **after** the registry bound: they select from the already-pruned catalog, so an attachment can narrow the agent's view but never resurrect a registry-pruned tool.
 
 **Group override semantics:** if a group provides a `tools:` block, it **supersedes** the inherited block; otherwise the inherited config applies unchanged. Within a block: `allow` alone = exactly this set (expanded against the post-registry catalog, so a group override may supersede — not merely intersect — the agent's inherited view); `deny` alone = inherited minus these; both = allow-then-subtract. `tools: {deny: "*"}` hides a server from a group entirely. Cross-group merge: union of allows, any group's deny wins (deny is global, allow is per-group).
 
 > [!NOTE]
-> **Vocabulary split.** Registry- and agent-level blocks use `whitelist`/`blacklist` with a strict one-of-the-two rule; group-level blocks use `allow`/`deny` and permit both together (deny applies after allow). The keys are not interchangeable across levels.
+> **Uniform vocabulary.** All four levels use `allow`/`deny`, either or both, with deny applied after allow (deny wins on overlap). A single string pattern is accepted wherever a list is (the `deny: "*"` idiom). At the registry and attachment levels, `whitelist`/`blacklist` are accepted as aliases of `allow`/`deny`; declaring a canonical key together with its own alias in one block (`allow` + `whitelist`, or `deny` + `blacklist`) is a load-time error. Group blocks accept the canonical keys only.
 
 > [!NOTE]
 > **Registry is not grant.** The formation-level `mcp.servers` list defines connections and prunes tool catalogs; capability flows to an agent only via that agent's `mcp_servers` attachment.
@@ -975,7 +977,7 @@ agents:
 - ✅ HTTP servers must have `endpoint`
 - ✅ Auth configurations must be complete
 - ✅ `parameters` (if present) must be a flat key-value map
-- ✅ `tools` (if present) must declare exactly one of `whitelist` or `blacklist`, each a non-empty list of strings
+- ✅ `tools` (if present) must declare `allow` and/or `deny` (`whitelist`/`blacklist` accepted as aliases), each a non-empty string pattern or list of strings; a canonical key together with its own alias in one block is an error, as is any unknown key
 
 ### MCP Default Parameters
 
@@ -1015,7 +1017,7 @@ auth:
   token: "${{ secrets.GITHUB_PAT }}"
 
 tools:
-  whitelist:               # mutually exclusive with blacklist
+  allow:
     - "search_*"           # fnmatch globs (* ? [...])
     - "get_*"
     - "issue_*"
@@ -1023,14 +1025,22 @@ tools:
     - "create_or_update_file"
 ```
 
-Or, equivalently, allow everything except destructive ops:
+Or allow everything except destructive ops:
 
 ```yaml
 tools:
-  blacklist:
+  deny:
     - "delete_*"
     - "force_push_branch"
     - "merge_pull_request"
+```
+
+Or both together — allow a surface, then subtract from it (deny applies after allow):
+
+```yaml
+tools:
+  allow: ["issue_*", "get_*"]
+  deny: ["issue_delete"]
 ```
 
 Pattern semantics (POSIX `fnmatch`):
@@ -1044,12 +1054,15 @@ Pattern semantics (POSIX `fnmatch`):
 | no metachar | literal name match (exact, case-sensitive)           |
 
 Rules:
-- Exactly one of `whitelist` or `blacklist` per server (declaring both is a load-time error).
+- `allow` and/or `deny` per server: `allow` alone keeps only matching tools, `deny` alone keeps everything except matching tools, both together apply allow first and then subtract deny (deny wins on overlap).
+- `whitelist`/`blacklist` are accepted as aliases of `allow`/`deny`. Declaring a canonical key together with its own alias in one block (`allow` + `whitelist`, or `deny` + `blacklist`) is a load-time error; any other key in the block is a load-time error too.
+- A single string pattern is accepted in place of a list (`deny: "*"`).
 - Patterns are case-sensitive and match against the upstream MCP tool's `name` field.
-- An empty list (`whitelist: []`) is a load-time warning — no filter is applied.
+- An empty list (`allow: []`) is a load-time warning — no filter is applied.
 - A pattern that matches **zero** upstream tools surfaces a warning with `difflib`-style "did you mean?" suggestions for literal patterns.
 - A post-filter set that contains **zero** tools is a clean skip: the server is **not** registered, agents that reference it get no tools from this source, and a warning is emitted. This is by design — operators may legitimately disable a server via filter — but no agent receives tools from a server whose filter excluded everything.
 - The filter runs at registration time, between `tools/list` discovery and registry insertion. It does not affect tool execution; tools that pass the filter behave identically to an unfiltered registration.
+- The same block (same keys, same semantics) appears on agent `mcp_servers` attachments — inline definitions and `{id, tools}` references alike — where it chains after the registry-level filter. See "The Tool Override Cascade".
 
 ### A2A Validation
 - ✅ Must have `schema`, `id`, `url`
