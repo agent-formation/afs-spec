@@ -15,7 +15,8 @@ This directory contains the canonical Agent Formation schema templates and the a
 | `sops/` | SOP templates (markdown + frontmatter; auto-discovered) |
 | `triggers/` | Trigger templates (markdown + frontmatter; auto-discovered) |
 | `transformers/` | Outbound payload transformer templates (auto-discovered) |
-| `groups/` | Access-control group templates (auto-discovered; requires `server.auth: required`) |
+| `groups/` | Access-control group templates (auto-discovered; memberships attached per request by the middleware) |
+| `middleware/` | Request middleware contract — the `middleware:` block and its `middleware` tool payload schema |
 | `knowledge/` | Knowledge base files directory |
 
 ## File extensions

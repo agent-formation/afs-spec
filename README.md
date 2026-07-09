@@ -122,7 +122,7 @@ Formation files describe **complete agent systems** with modular components:
   Outbound payload formatters for delivery targets (Slack, Telegram, Discord, email bridges). Auto-discovered; bundled channel templates can be shadowed.
 
 - **Groups** (`groups/*.afs`)
-  Access-control groups: per-group agent/trigger/SOP grants and tool overrides. Auto-discovered; requires `server.auth: required`.
+  Access-control groups: per-group agent/trigger/SOP grants and tool overrides. Auto-discovered; memberships arrive per request via the formation's request middleware (`rbac` + `middleware` blocks).
 
 - **Knowledge** (`knowledge/`)
   Portable knowledge assets.

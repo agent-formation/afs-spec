@@ -1,13 +1,14 @@
 # Group definition template -- the group id derives from the filename stem (analyst).
 #
 # Groups are AUTO-DISCOVERED from the groups/ directory (content/policy tier;
-# no manifest entry). A groups/ directory containing group files REQUIRES
-# server.auth: "required" in the formation file -- combining group files with
-# auth: open (or omitted auth) is a load-time validation error. An empty
-# groups/ directory is inert (warning only).
+# no manifest entry). With rbac.active: auto (the default), RBAC is on iff
+# this directory contains group files. An empty groups/ directory is inert
+# (warning only).
 #
-# A group file grants nothing by itself: it takes effect only when the
-# runtime's user database maps a user to this group id.
+# A group file grants nothing by itself: MUXI stores no group memberships.
+# It takes effect only when the formation's request middleware attaches this
+# group id to a request (or rbac.fallback names it). See schemas/middleware/
+# for the middleware contract.
 
 name: "Business Analyst"                # Optional human-readable name
 description: "Analysis and reporting"   # Optional description

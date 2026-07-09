@@ -21,7 +21,8 @@ This guide documents the complete schema structure for Agent Formation, includin
 - [📁 Formation Schema (`formation.afs`)](#-formation-schema-formationafs)
 - [Basic Formation Information](#basic-formation-information)
 - [Server Configuration](#server-configuration)
-- [Access Control (`server.auth` + `groups/`)](#access-control-serverauth--groups)
+- [Access Control (`rbac` + `middleware` + `groups/`)](#access-control-rbac--middleware--groups)
+  - [The Middleware Tool Contract](#the-middleware-tool-contract)
   - [Group Definition Format](#group-definition-format)
   - [Permission Resolution Rules](#permission-resolution-rules)
   - [The Tool Override Cascade](#the-tool-override-cascade)
@@ -155,7 +156,6 @@ server:
   host: "0.0.0.0"   # Default: 0.0.0.0
   port: 3000        # Default: 3000
   access_log: false # Default: false - Enable detailed access logging
-  auth: "open"      # Default: open - Access control mode ("open" | "required")
 
   # API Keys (auto-generated if not provided)
   api_keys:
@@ -168,28 +168,74 @@ server:
 | `server.host` | ❌ No | string | "0.0.0.0" | Host/IP to bind the API server to |
 | `server.port` | ❌ No | integer | 3000 | Port number for the API server |
 | `server.access_log` | ❌ No | boolean | false | Enable detailed HTTP access logging |
-| `server.auth` | ❌ No | string | "open" | Access control mode: `open` or `required` (see Access Control) |
 | `server.api_keys.admin_key` | ❌ No | string | Auto-generated | API key for formation management operations |
 | `server.api_keys.client_key` | ❌ No | string | Auto-generated | API key for user interactions |
 
 > [!NOTE]
 > API key header names and user identification headers are implementation-defined. See your runtime documentation for details.
 
-### Access Control (`server.auth` + `groups/`)
-*Group-based access control: who can reach the formation, and which resources each group can use*
+### Access Control (`rbac` + `middleware` + `groups/`)
+*Group-based access control: how memberships reach the formation, and which resources each group can use*
+
+The runtime stores **no group memberships**. Groups reach a formation in exactly one way: a formation-declared **request middleware** — a standard MCP server the runtime calls with every request payload after client-key auth and before any processing. The middleware matches `user_id` to groups against whatever the organization uses (its DB, WorkOS, LDAP, a static map); how it does so is outside this standard.
+
+Both blocks are **top-level** — not under `server:`, because the pipeline applies equally to HTTP traffic and to embedded `overlord.chat(...)` use:
 
 ```yaml
 # formation.afs
-server:
-  auth: required  # or open (default)
+rbac:
+  active: auto            # auto (default) | true | false
+  fallback: false         # false | <group_name>
+
+middleware:
+  # An actual MCP server declaration. Exactly one transport:
+  url: "${{ secrets.RESOLVER_URL }}"     # http
+  headers:
+    Authorization: "Bearer ${{ secrets.RESOLVER_TOKEN }}"
+  # command: "./middleware.py"           # stdio (alternative)
+  # args: ["--map", "groups.json"]
+  timeout: 2s                            # the only runtime knob
 ```
 
-| Value | Behavior |
-|-------|----------|
-| `open` | Any user can interact with the formation. A `groups/` directory containing group files is **not** permitted with `open` — the combination fails formation load. |
-| `required` | Only users present in the runtime's user database can interact. Unknown users are rejected across all channels. If `groups/` exists, resource filtering is applied; if not, authenticated users have full access. |
+| Field | Required | Type | Default | Description |
+|-------|----------|------|---------|-------------|
+| `rbac.active` | ❌ No | string/bool | `auto` | `auto`: RBAC is on iff `groups/` contains group files. `true`: explicit intent — no group files fails the load. `false`: kill switch — filtering disabled even if `groups/` exists (logged loudly at load) |
+| `rbac.fallback` | ❌ No | `false`/string | `false` | Applies to a request that ends up with **no groups** (no middleware, or the middleware cleanly returned none): `false` rejects it; `<group_name>` proceeds with that group's permissions (`public` is the idiomatic open tier). The named group must exist in `groups/` (validated at load). Never applies to middleware errors |
+| `middleware.url` | ❌ Conditional | string | None | HTTP transport endpoint (exactly one transport: `url` or `command`) |
+| `middleware.headers` | ❌ No | map | None | HTTP headers (auth etc.); only with `url` |
+| `middleware.command` | ❌ Conditional | string | None | Stdio transport command, e.g. `./middleware.py` (exactly one transport) |
+| `middleware.args` | ❌ No | list | None | Stdio command arguments; only with `command` |
+| `middleware.timeout` | ❌ No | duration | 10s | Per-call timeout — the only runtime-side knob (no runtime caching) |
 
-Group permission files live in a `groups/` directory and are **auto-discovered** (content/policy tier — no manifest entry, unlike agents/MCP/A2A/skills). A group file grants nothing until the runtime's user database maps a user to the group id, so discovery-on-presence is safe. An empty `groups/` directory is inert (warning only). How users and group memberships are populated is a runtime/operational concern outside this standard.
+**Dead-config rule:** RBAC active + `fallback: false` + no `middleware` block would reject every request — the formation fails to load. (With `fallback: <group>` the combination is legal: every request gets the fallback tier.)
+
+**Pipeline** (identical for external requests and the internal origins — heartbeat and scheduler synthesize the same payload and traverse the same steps):
+
+```
+client-key auth (external) / internal origin
+   └─ middleware (if declared)         request payload -> request payload (+ groups)
+        └─ rbac (if active)
+             groups attached? -> resolve permissions from groups/
+             no groups?       -> fallback group | reject
+                  └─ process request (filtered context)
+```
+
+#### The Middleware Tool Contract
+
+The middleware **must** be an actual MCP server (stdio or http) exposing exactly one tool named `middleware` whose input and output schemas are defined by the spec. At formation load the runtime connects, lists tools, and **fails fast** if the tool is absent or its declared schema does not match the contract.
+
+- **Input:** the full request payload — `user_id`, `message`, `attachments`, `metadata`, `route_class` — as the tool arguments. `groups` is **never** part of the inbound payload; an input schema declaring it fails formation load. Groups can only be attached on the way out, so they can never arrive as a caller's claim.
+- **Output:** the same-shaped payload, possibly modified, plus an optional `groups` list of group ids — the **only** channel through which memberships enter the runtime. Identity mapping (rewriting `user_id`) and payload policy are permitted; `route_class` must be echoed unchanged. Every response is validated against the request schema before the runtime continues with it.
+- **`route_class`** identifies the origin: external routes (`chat`, `audiochat`, `trigger`, `api`) and the internal origins `heartbeat` and `scheduler` — internal requests traverse the middleware identically, no special cases.
+
+**Fail-closed:** a middleware error, timeout, or malformed/schema-invalid response rejects the request. `rbac.fallback` does not apply to errors — a fallback on error would let an identity-provider outage silently reassign users to the fallback group. **No runtime-side caching:** the middleware is called on every request; respond fast, cache internally if needed.
+
+> [!NOTE]
+> **Removed surface.** Earlier revisions specified `server.auth: required|open` gated by a runtime-side user/membership database. Both are removed; a formation still carrying `server.auth` fails to load with a migration error. The client key authenticates the calling application; user-level gating is `rbac.fallback: false` (grouped users only) plus a middleware that returns no groups for unknown users.
+
+See `schemas/middleware/` for the full tool payload schema and a template walkthrough.
+
+Group permission files live in a `groups/` directory and are **auto-discovered** (content/policy tier — no manifest entry, unlike agents/MCP/A2A/skills). A group file grants nothing until the middleware attaches its id to a request (or `rbac.fallback` names it), so discovery-on-presence is safe. An empty `groups/` directory is inert (warning only).
 
 #### Group Definition Format
 
@@ -249,8 +295,8 @@ memory:
 2. **Union of allows** across all of a user's groups.
 3. **Wildcards** — patterns are POSIX `fnmatch` globs (`*`, `?`, `[...]`) in both allow and deny lists.
 4. **Inheritance** — parent permissions resolve first; list sections merge additively; a child's tool-override block **replaces** the parent's block for the same (agent, server) key; deny in the child overrides allow in the parent.
-5. **No `groups/` directory** = no resource filtering for authenticated users.
-6. **User in DB with no group memberships** — passes the auth gate but reaches no resources.
+5. **No `groups/` directory** = RBAC is inactive under `active: auto`; no resource filtering.
+6. **A request that ends up with no groups** (no middleware, or the middleware cleanly returned none) is rejected — unless `rbac.fallback` names a group, in which case it proceeds with that group's permissions.
 
 #### The Tool Override Cascade
 
@@ -678,7 +724,7 @@ Template: `schemas/sops/weekly-report.md`.
 
 ## ⚡ Trigger Schema (`triggers/*.md`)
 
-Triggers are markdown files with YAML frontmatter under `triggers/`, **auto-discovered**. The id is the filename stem and must match `^[a-zA-Z0-9_-]+$`. Each trigger is exposed at `POST /v1/triggers/{id}` (client key + user auth gate); `GET /v1/triggers` lists, `GET /v1/triggers/{id}` returns metadata.
+Triggers are markdown files with YAML frontmatter under `triggers/`, **auto-discovered**. The id is the filename stem and must match `^[a-zA-Z0-9_-]+$`. Each trigger is exposed at `POST /v1/triggers/{id}` (client key; the request traverses the middleware + RBAC pipeline like every other route); `GET /v1/triggers` lists, `GET /v1/triggers/{id}` returns metadata.
 
 ```markdown
 ---
@@ -959,8 +1005,13 @@ agents:
 - ✅ LLM models must specify valid capabilities
 - ✅ All secret references must be valid
 - ✅ Component IDs must be unique
-- ✅ `server.auth` (if present) must be `open` or `required`
-- ✅ A `groups/` directory containing group files requires `server.auth: required` (open + groups fails load; empty `groups/` is a warning)
+- ✅ `server.auth` is no longer a valid key — a formation carrying it fails the load with a migration error
+- ✅ `rbac.active` (if present) must be `auto`, `true`, or `false`
+- ✅ `rbac.active: true` requires a `groups/` directory containing group files (empty `groups/` is a warning)
+- ✅ `rbac.fallback` (if a group name) must name an existing group file in `groups/`
+- ✅ RBAC active + `rbac.fallback: false` + no `middleware` block fails the load (dead config: every request would be rejected)
+- ✅ `middleware` must declare exactly one transport: `url` (+ optional `headers`) or `command` (+ optional `args`); `timeout` must be a duration string
+- ✅ At load, the declared middleware must be reachable and expose exactly one tool named `middleware` whose declared schema matches the contract; an input schema declaring `groups` fails the load
 - ✅ `llm.aliases` keys must match `[a-zA-Z0-9_-]+`, values must be `provider/model`, and keys must not collide with capability names
 - ✅ All `model:` references (SOP/trigger/skill frontmatter, `[model:x]` directives) must resolve to an alias or be `provider/model` form
 - ✅ `proactive.heartbeat.enabled: true` requires `scheduler.enabled: true`
@@ -1099,7 +1150,7 @@ Rules:
 - ✅ Section values must be a list, the wildcard string `"*"`, or a `{allow, deny}` mapping
 - ✅ `mcp_servers.<id>` supports only the `tools` sub-key; `tools` blocks use `allow`/`deny` (both permitted)
 - ✅ `memory` supports only the `write` sub-key
-- ✅ Group files require `server.auth: required` in the formation
+- ✅ A group file grants nothing by itself — it takes effect only when the request middleware attaches its id to a request (or `rbac.fallback` names it)
 
 ## 🎯 Best Practices
 

@@ -143,7 +143,7 @@ Each trigger is exposed by id at:
 POST /v1/triggers/{id}
 ```
 
-authenticated with the formation's client key plus the user auth gate (§5). Runtimes should also expose `GET /v1/triggers` (list) and `GET /v1/triggers/{id}` (metadata).
+authenticated with the formation's client key; the request then traverses the request middleware + RBAC pipeline (§5) like every other route. Runtimes should also expose `GET /v1/triggers` (list) and `GET /v1/triggers/{id}` (metadata).
 
 Frontmatter keys (closed set — unknown keys are a load error):
 
@@ -205,7 +205,7 @@ Component loading follows a two-tier rule:
 | Tier | Components | Loading | Rationale |
 |------|-----------|---------|-----------|
 | **Architecture** | agents, MCP servers, A2A services, skills | Explicit declaration in the formation manifest | They define the formation's capability surface |
-| **Content / policy** | SOPs, triggers, groups, transformers | Auto-discovered from their directory | Data consumed by the architecture; their effect is gated elsewhere (SOP semantic matching, trigger URL + auth, group DB membership) |
+| **Content / policy** | SOPs, triggers, groups, transformers | Auto-discovered from their directory | Data consumed by the architecture; their effect is gated elsewhere (SOP semantic matching, trigger URL + auth, middleware-resolved group membership) |
 
 **Architecture tier.** Components are declared explicitly in the formation file by ID. Files in subdirectories (`agents/`, `mcp/`, `a2a/`, `skills/`) are pure definitions; only components listed in the formation manifest are loaded.
 
@@ -267,23 +267,70 @@ Model references are validated at load time: each must resolve to a defined alia
 
 ## 5. Access control
 
-### 5.1 `server.auth`
+The runtime stores **no group memberships**. Groups reach a formation in exactly one way: a formation-declared **request middleware** — a standard MCP server the runtime calls with every request payload after client-key auth and before any processing. The middleware matches `user_id` to groups against whatever the organization uses (its DB, WorkOS, LDAP, a static map); how it does so is outside this standard.
+
+### 5.1 `rbac` and `middleware`
+
+Two **top-level** blocks — not under `server:`, because the pipeline applies equally to HTTP traffic and to embedded `overlord.chat(...)` use:
 
 ```yaml
-server:
-  auth: required   # or open (default)
+rbac:
+  active: auto            # auto (default) | true | false
+  fallback: false         # false | <group_name>
+
+middleware:
+  # An actual MCP server declaration. Exactly one transport:
+  url: "${{ secrets.RESOLVER_URL }}"     # http
+  headers:
+    Authorization: "Bearer ${{ secrets.RESOLVER_TOKEN }}"
+  # command: "./middleware.py"           # stdio (alternative)
+  # args: ["--map", "groups.json"]
+  timeout: 2s                            # the only runtime knob
 ```
 
-| Value | Behavior |
-|-------|----------|
-| `open` | Any user can interact with the formation. Default. |
-| `required` | Only users present in the runtime's user database can interact. Unknown users are rejected uniformly across all channels (API, triggers, chat). |
+**`rbac`:**
 
-How the user database is populated is a runtime/operational concern, outside this standard.
+| Setting | Behavior |
+|---------|----------|
+| `active: auto` (default) | RBAC is on iff `groups/` contains group files |
+| `active: true` | Declares intent explicitly; no group files **must** be a load-time error |
+| `active: false` | Kill switch: `groups/` may exist but filtering is disabled; runtimes must log this loudly at load |
+| `fallback: false` (default) | A request that ends up with **no groups** is rejected |
+| `fallback: <group>` | No-group requests proceed with that group's permissions (`public` is the idiomatic open tier); the named group must exist in `groups/`, validated at load |
+
+`fallback` applies only to a **clean no-groups outcome** — no middleware declared, or the middleware cleanly answered "none". It **never** applies to middleware errors (fail-closed, below).
+
+**Dead-config rule:** RBAC active + `fallback: false` + no `middleware` block would reject every request — this **must** be a load-time error. (With `fallback: <group>` the combination is legal: every request gets the fallback tier.)
+
+**`middleware`** is a single optional request transformer that **must** be an actual MCP server — stdio (`command` + optional `args`) or http (`url` + optional `headers`), exactly one transport — plus `timeout` (a duration string such as `2s`). It **must** expose exactly one tool named `middleware` whose input and output schemas are defined by this spec. At formation load the runtime connects, lists tools, and **must fail fast** if the tool is absent or its declared schema does not match the contract.
+
+**Tool contract — request payload in, request payload out:**
+
+- Input: the full request payload — `user_id`, `message`, `attachments`, `metadata`, `route_class` — as the tool arguments. `groups` is **never** part of the inbound payload; a middleware declaring it as an input property **must** fail formation load. Groups can only be attached on the way out, so they can never arrive as a caller's claim.
+- Output: the same-shaped payload, possibly modified, plus an optional `groups` list of group ids — the **only** channel through which memberships enter the runtime (no request-asserted form, therefore no precedence rules). Identity mapping (rewriting `user_id`) and payload policy are permitted; `route_class` must be echoed unchanged. The runtime **must** validate every response against the request schema before continuing with it.
+- `route_class` identifies the origin: external routes (`chat`, `audiochat`, `trigger`, `api`) and the internal origins `heartbeat` and `scheduler`. Internally-originated requests synthesize the same payload and traverse the identical pipeline — no special cases.
+- The middleware's only voice into the request is the returned payload. Middleware wanting to persist context does so itself through the public API; it gets no side channel.
+
+**Pipeline** (identical for external and internally-originated requests):
+
+```
+client-key auth (external) / internal origin
+   └─ middleware (if declared)         request payload -> request payload (+ groups)
+        └─ rbac (if active)
+             groups attached? -> resolve permissions from groups/ (§5.2)
+             no groups?       -> fallback group | reject
+                  └─ process request (filtered context)
+```
+
+**Fail-closed:** a middleware error, timeout, or malformed/schema-invalid response **must** reject the request. `rbac.fallback` does not apply to errors — a fallback on error would let an identity-provider outage silently reassign users to the fallback group. Rejections must be observable (authorization-failure / middleware events).
+
+**No runtime-side caching:** the middleware is called on every request with full transformation rights — one consistent semantic. Responding fast is the middleware's responsibility; it may cache internally however it likes. The only runtime knob is `timeout`.
+
+**Removed surface:** earlier drafts of this section specified `server.auth: required|open` gated by a runtime-side user/membership database. Both are removed. A formation still carrying `server.auth` **must** fail to load with a migration error. The client key authenticates the calling application; user-level gating is expressed as `rbac.fallback: false` (grouped users only) plus a middleware that returns no groups for unknown users.
 
 ### 5.2 Groups
 
-Group permission files live in a `groups/` directory and are **auto-discovered** (§3). A `groups/` directory containing group files **requires** `server.auth: required`; combining group files with `auth: open` (or an omitted `auth`) **must** be a load-time validation error — otherwise unknown users would bypass the restrictions that registered users are subject to. An empty `groups/` directory is inert (warning only).
+Group permission files live in a `groups/` directory and are **auto-discovered** (§3). A group file grants nothing by itself: it takes effect only when the request middleware attaches its id to a request (or `rbac.fallback` names it), so discovery-on-presence is safe. An empty `groups/` directory is inert (warning only).
 
 Group file format — the group id is the filename stem:
 
@@ -325,8 +372,8 @@ Sections: `agents`, `mcp_servers`, `triggers`, `sops`, `native_apps`, `memory.wr
 
 1. **Union of allows** across a user's groups; **any group's deny wins** (deny is global, allow is per-group).
 2. **Inheritance** resolves parents first (depth-first, cycle-checked); list sections merge additively; a child's tool-override block **replaces** the parent's block for the same (agent, server) key.
-3. **No `groups/` directory** = no resource filtering (all authenticated users see everything).
-4. **A user with no group memberships** passes the auth gate but reaches no resources.
+3. **No `groups/` directory** = RBAC is inactive under `active: auto`; no resource filtering.
+4. **A request that ends up with no groups** (no middleware, or the middleware cleanly returned none) is rejected — unless `rbac.fallback` names a group, in which case it proceeds with that group's permissions (§5.1).
 
 ### 5.3 The tool override cascade
 
