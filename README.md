@@ -67,6 +67,14 @@ Both are fully supported and functionally identical. Use `.afs` for clarity in p
 │   ├── a2a/                  # Agent-to-agent service templates
 │   │   ├── analytics_engine.afs
 │   │   └── external_billing_service.afs
+│   ├── sops/                 # SOP templates (auto-discovered)
+│   │   └── weekly-report.md
+│   ├── triggers/             # Trigger templates (auto-discovered)
+│   │   └── github-issues.md
+│   ├── transformers/         # Outbound payload transformer templates
+│   │   └── slack-bridge.afs
+│   ├── groups/               # Access-control group templates
+│   │   └── analyst.afs
 │   └── knowledge/            # Knowledge base files directory
 │       └── README.md
 ├── specs/                    # Specification documents
@@ -104,6 +112,18 @@ Formation files describe **complete agent systems** with modular components:
 - **Skills** (`skills/`)
   Reusable agent capabilities following the [Agent Skills specification](https://agentskills.io/specification). Each skill contains a `SKILL.md` with instructions, plus optional scripts and assets.
 
+- **SOPs** (`sops/*.md`)
+  Standard operating procedures — markdown procedures with frontmatter and step directives. Auto-discovered.
+
+- **Triggers** (`triggers/*.md`)
+  Inbound HTTP entry points (`POST /v1/triggers/{id}`) with payload parsing and outbound webhook/transformer composition. Auto-discovered.
+
+- **Transformers** (`transformers/*.afs`)
+  Outbound payload formatters for delivery targets (Slack, Telegram, Discord, email bridges). Auto-discovered; bundled channel templates can be shadowed.
+
+- **Groups** (`groups/*.afs`)
+  Access-control groups: per-group agent/trigger/SOP grants and tool overrides. Auto-discovered; memberships arrive per request via the formation's request middleware (`rbac` + `middleware` blocks).
+
 - **Knowledge** (`knowledge/`)
   Portable knowledge assets.
 
@@ -137,6 +157,10 @@ Formation files describe **complete agent systems** with modular components:
 | Skills | `schemas/skills/*/SKILL.md` | [Agent Skills Spec](https://agentskills.io/specification) |
 | MCP server | `schemas/mcp/*.afs` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
 | A2A service | `schemas/a2a/*.afs` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
+| SOP | `schemas/sops/*.md` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
+| Trigger | `schemas/triggers/*.md` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
+| Transformer | `schemas/transformers/*.afs` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
+| Group | `schemas/groups/*.afs` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
 
 ---
 

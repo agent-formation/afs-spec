@@ -40,6 +40,36 @@ server:
     client_key: "${{ secrets.FORMATION_CLIENT_API_KEY }}"
     # Used for user interactions (chat, memories, etc), requires user_id header
 
+# Access control (optional) -- TOP-LEVEL blocks, NOT under server: (the
+# pipeline also applies to embedded overlord.chat(...) use). The runtime
+# stores no group memberships: groups reach the formation only via the
+# request middleware below. See schemas/groups/ and schemas/middleware/.
+#
+# rbac:
+#   active: auto          # auto (default: on iff groups/ has files) | true | false
+#                         # true without group files fails the load;
+#                         # false is a loud kill switch (filtering disabled)
+#   fallback: false       # false (default: reject no-group requests) | <group_name>
+#                         # ("public" is the idiomatic open tier; the group file
+#                         #  must exist). Applies only to a clean no-groups
+#                         #  outcome -- NEVER to middleware errors (fail-closed).
+#                         # RBAC active + fallback: false + no middleware block
+#                         # is dead config and fails the load.
+#
+# middleware:
+#   # An actual MCP server with exactly one transport (url OR command).
+#   # MUST expose exactly one tool named "middleware": full request payload in
+#   # (user_id, message, attachments, metadata, route_class -- never groups),
+#   # same-shaped payload out, optionally attaching groups. Called on every
+#   # request, no runtime caching; errors/timeouts/malformed responses reject
+#   # the request (fail-closed).
+#   url: "${{ secrets.RESOLVER_URL }}"    # http transport
+#   headers:
+#     Authorization: "Bearer ${{ secrets.RESOLVER_TOKEN }}"
+#   # command: "./middleware.py"          # stdio transport (alternative)
+#   # args: ["--map", "groups.json"]
+#   timeout: 2s                           # the only runtime knob (default: 10s)
+
 # Input Validation Limits
 input_limits:
   max_message_length: 100000        # Maximum chat message length in characters (default: 100KB)
@@ -72,6 +102,17 @@ llm:
     openai: "${{ secrets.OPENAI_API_KEY }}" # Environment variable substitution
     anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
     # Add other providers as needed
+
+  # Semantic model aliases (optional)
+  # Map alias names to fully qualified provider/model strings. Aliases are
+  # accepted anywhere a model: reference is (agent llm_models, SOP / trigger /
+  # skill frontmatter model:, SOP step [model:x] directives). Alias names must
+  # match [a-zA-Z0-9_-]+ and must NOT collide with capability names (text,
+  # vision, audio, video, documents, embedding, streaming). The most specific
+  # reference wins -- see SCHEMA_GUIDE.md "Model Selection Hierarchy".
+  aliases:
+    fast: "openai/gpt-4o-mini"
+    premium: "anthropic/claude-sonnet-4-5"
 
   # Model definitions by capability
   models:
@@ -139,8 +180,10 @@ llm:
 
 # Overlord behavior configuration
 # NOTE: The overlord's soul (identity, tone, values) can also be defined in a
-# SOUL.md file next to this formation file. If SOUL.md (or soul.md) exists,
-# it takes precedence over the inline `soul` field below.
+# SOUL.md file next to this formation file, auto-discovered by fixed filename.
+# Precedence: SOUL.md > soul.md > the inline `soul` field below > the runtime's
+# built-in default. Soul is overlord-only; agents have no soul field — an
+# agent's character lives in its system_message.
 overlord:
   soul: |
     You are Fynn, a helpful assistant for Company XYZ.
@@ -341,6 +384,22 @@ memory:
       cache_ttl: 3600 # Time to live for user synopsis in seconds
 
 
+# Artifacts configuration (optional)
+# Artifact capture is ON BY DEFAULT -- omitting this block still yields local
+# artifact storage with the defaults below. Set enabled: false to opt out.
+artifacts:
+  enabled: true                 # default: true
+  storage:
+    type: "local"               # v1: "local" only (s3 and other backends are
+                                # rejected at load; reserved for a later minor)
+    path: "./artifacts"         # default; relative to the formation directory
+  encryption:
+    enabled: true               # default: true
+  retention:
+    policy: "last_accessed"     # "last_accessed" (default) | "last_updated"
+    duration: 0                 # days; 0 = keep forever (default)
+
+
 # Logging Configuration
 # ====================
 # Two-tier logging architecture:
@@ -471,6 +530,48 @@ scheduler:
   check_interval_minutes: 1         # Check for due jobs every N minutes
   max_concurrent_jobs: 10           # Maximum concurrent job executions
   max_failures_before_pause: 3      # Auto-pause jobs after N consecutive failures
+
+# Proactive messaging configuration (optional)
+# Declares outbound notification channels and an optional autonomous heartbeat.
+# Channels reference transformers by name (formation transformers/ directory
+# first, then the runtime's bundled slack/telegram/discord/email templates).
+proactive:
+  channels:
+    slack:
+      transformer: slack                    # transformer name (no path)
+      url: "${{ secrets.SLACK_WEBHOOK }}"   # optional; overrides the transformer's
+                                            # endpoint.url. REQUIRED at load time if
+                                            # the transformer declares no URL itself.
+  default_channel: slack      # optional fallback: channel name or literal "webhook"
+                              # (routing: explicit channel > user preference >
+                              #  default_channel > async.webhook_url)
+  heartbeat:
+    enabled: true             # default true when the block is present.
+                              # REQUIRES scheduler.enabled: true (load-time check).
+    interval: "30m"           # duration string (Ns / Nm / Nh); default 30m
+    target: "last"            # last | preferred | webhook | <channel name>
+                              # ("last", "preferred", "webhook" are reserved and
+                              #  cannot be used as channel names)
+    active_hours:             # optional; absent = always active
+      start: "09:00"          # 24-hour HH:MM
+      end: "18:00"            # start > end wraps past midnight
+      timezone: "UTC"         # IANA name, or literal "user" for per-user timezones
+      weekends: true          # default true; false suppresses Sat/Sun
+    sop: "my-heartbeat"       # optional formation SOP replacing the runtime's
+                              # bundled default heartbeat SOP (must exist at load)
+    instruction: "Focus on today's prep"  # optional; appended to the heartbeat prompt
+
+# Commands configuration (optional)
+# Opt-in slash-command surface. Resolution order: aliases -> formation SOPs
+# by name (a formation SOP SHADOWS a built-in of the same name) -> built-in
+# registry (reference set: setup, help, status, jobs, identity, channels,
+# preferences, reset).
+commands:
+  enabled: true               # default true when the block is present
+  aliases:
+    tasks: jobs               # /tasks resolves like /jobs
+  builtin:
+    reset: false              # hide the built-in /reset (unknown names fail validation)
 
 # A2A Configuration (optional, enabled by default)
 a2a:
@@ -674,6 +775,12 @@ user_credentials:
 skills:
   - pdf-processing
   - data-analysis
+
+# Alternative mapping form: load formation skills AND disable named built-in
+# skills that the runtime would otherwise load automatically (e.g. compute):
+# skills:
+#   names: [pdf-processing, data-analysis]
+#   disable_builtin: [compute]
 
 # Executor configuration for skill script execution
 executor:

@@ -1,0 +1,62 @@
+# Group definition template -- the group id derives from the filename stem (analyst).
+#
+# Groups are AUTO-DISCOVERED from the groups/ directory (content/policy tier;
+# no manifest entry). With rbac.active: auto (the default), RBAC is on iff
+# this directory contains group files. An empty groups/ directory is inert
+# (warning only).
+#
+# A group file grants nothing by itself: MUXI stores no group memberships.
+# It takes effect only when the formation's request middleware attaches this
+# group id to a request (or rbac.fallback names it). See schemas/middleware/
+# for the middleware contract.
+
+name: "Business Analyst"                # Optional human-readable name
+description: "Analysis and reporting"   # Optional description
+
+# Optional inheritance: string or list of group ids. Parents resolve first
+# (depth-first; unknown parents and cycles are load errors). List sections
+# merge additively; a child's tool-override block REPLACES the parent's
+# block for the same (agent, server) key. Deny in the child overrides
+# allow in the parent.
+inherits: base-user
+
+# --- Sections -------------------------------------------------------------
+# Plain lists are allow-lists. "*" matches all. Patterns are fnmatch globs
+# (*, ?, [...]); literals match exactly. Use the long form
+# {allow: [...], deny: [...]} when subtracting from wildcards or overriding
+# inherited allows. Across a user's groups: union of allows, any group's
+# deny wins.
+
+agents:
+  - researcher                          # plain grant -- agent keeps its own tool config
+  - report-writer
+  - db-assistant:                       # grant + agent-scoped tool override
+      database-mcp:                     # (most specific cascade level: this group,
+        tools:                          #  this agent, this server)
+          allow: [get_financials, list_orders]
+
+# Group-wide tool overrides per MCP server -- applies to every granted agent
+# that attaches the server. If present, the block SUPERSEDES the inherited
+# tool config; otherwise the agent's/registry's config applies unchanged.
+# Within a block: allow alone = exactly this set (expanded against the
+# post-registry catalog); deny alone = inherited minus these; both =
+# allow-then-subtract. Hiding a server entirely: tools: {deny: "*"}.
+mcp_servers:
+  database-mcp:
+    tools:
+      deny: ["update_*", "delete_*"]
+
+triggers:
+  - invoice-processor
+  - "report-*"                          # glob allow
+
+sops: "*"                               # all SOPs
+
+# Native runtime apps visible to this group. Groups with no native_apps
+# section allow all native apps that don't require elevated privilege.
+native_apps:
+  - memory-visualizer
+
+# Shared-memory write grants (scopes are data-plane identifiers).
+memory:
+  write: ["group:analyst"]

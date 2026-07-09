@@ -24,14 +24,16 @@ auth:                              # Environment variables passed as arguments t
 #   projectId: "${{ secrets.PROJECT_ID }}"
 
 # Tool filtering (optional)
-# Restrict the upstream tool catalog at registration time. Use exactly one
-# of whitelist or blacklist (declaring both is a load-time error).
+# Restrict the upstream tool catalog at registration time. Declare allow
+# and/or deny; deny applies after allow (deny wins on overlap).
+# whitelist/blacklist are accepted aliases of allow/deny (a canonical key
+# plus its own alias in one block is a load-time error).
 # Patterns are POSIX fnmatch globs; literals match exactly.
 # tools:
-#   blacklist:
+#   deny:
 #     - "delete_*"          # keep destructive verbs out of the planning prompt
 #     - "shell_exec"
 #   # Alternatively, narrow the surface to a known set:
-#   # whitelist:
+#   # allow:
 #   #   - "read_file"
 #   #   - "list_directory"

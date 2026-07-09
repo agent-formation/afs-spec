@@ -1,0 +1,53 @@
+# Transformer template -- outbound payload formatter.
+#
+# Transformers live in the formation's transformers/ directory and are
+# AUTO-DISCOVERED (content/policy tier; no manifest entry). They are
+# referenced by name from trigger frontmatter (transformer:) and from
+# proactive.channels entries.
+#
+# Runtimes ship bundled, dormant, payload-format-only templates named
+# slack, telegram, discord, and email (no endpoint -- the referencing
+# trigger or channel supplies the URL). A formation-local file of the
+# same name SHADOWS the bundled template (same rule as built-in skills).
+
+name: slack-bridge                     # REQUIRED; must match the filename stem
+
+version: "1.0"                         # Optional version annotation (semantic only)
+
+# Delivery destination. Optional: omit endpoint entirely for a
+# payload-format-only template (the referencing trigger's webhook: or the
+# proactive channel's url: then supplies the destination -- and MUST,
+# or formation load fails).
+endpoint:
+  url: "${{ secrets.SLACK_WEBHOOK_URL }}"  # supports secret interpolation
+  method: POST                         # GET | POST | PUT | PATCH | DELETE (default POST)
+
+# Optional authentication for the delivery request.
+auth:
+  type: bearer                         # bearer | basic | header
+  token: "${{ secrets.BRIDGE_TOKEN }}" # bearer: token
+  # basic:  username + password
+  # header: header_name + header_value
+
+# Optional custom headers.
+headers:
+  Content-Type: application/json
+
+# Request-body template. ${{ ... }} placeholders resolve against:
+#   response.content / response.files / response.metadata
+#   request.message / request.user_id / request.files
+#   context.*   (from the trigger's parse.context map)
+#   agent.name, secrets.*, timestamp (ISO 8601 UTC)
+# A value that is exactly one placeholder resolves natively (lists/objects
+# stay unquoted); otherwise placeholders substitute as strings, and absent
+# optional values are dropped from the rendered payload.
+body:
+  channel: "${{ context.channel }}"
+  thread_ts: "${{ context.thread_ts }}"    # optional; dropped if absent
+  text: "${{ response.content }}"
+
+# Optional response-content transformation applied before body templating.
+content_transform:
+  format: markdown                     # text (strip markdown) | markdown | html
+  max_length: 4000                     # truncate content to this length
+  truncation_suffix: "..."             # default "..."
