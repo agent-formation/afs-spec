@@ -16,6 +16,7 @@ A **Formation** is a declarative description of an AI agent system. It specifies
 - Standard operating procedures (SOPs) and inbound triggers
 - Outbound payload transformers and proactive messaging channels
 - Access control groups
+- Coding-agent delegation to external headless CLIs
 - Optional runtime-specific extensions
 
 A Formation is **portable by default** and should not assume a specific runtime.
@@ -308,7 +309,7 @@ middleware:
 
 - Input: the full request payload — `user_id`, `message`, `attachments`, `metadata`, `route_class` — as the tool arguments. `groups` is **never** part of the inbound payload; a middleware declaring it as an input property **must** fail formation load. Groups can only be attached on the way out, so they can never arrive as a caller's claim.
 - Output: the same-shaped payload, possibly modified, plus an optional `groups` list of group ids — the **only** channel through which memberships enter the runtime (no request-asserted form, therefore no precedence rules). Identity mapping (rewriting `user_id`) and payload policy are permitted; `route_class` must be echoed unchanged. The runtime **must** validate every response against the request schema before continuing with it.
-- `route_class` identifies the origin: external routes (`chat`, `audiochat`, `trigger`, `api`) and the internal origins `heartbeat` and `scheduler`. Internally-originated requests synthesize the same payload and traverse the identical pipeline — no special cases.
+- `route_class` identifies the origin: external routes (`chat`, `audiochat`, `trigger`, `api`) and the internal origins `heartbeat`, `scheduler`, and `delegation` (coding-delegation completion re-entry, §7). Internally-originated requests synthesize the same payload and traverse the identical pipeline — no special cases.
 - The middleware's only voice into the request is the returned payload. Middleware wanting to persist context does so itself through the public API; it gets no side channel.
 
 **Pipeline** (identical for external and internally-originated requests):
@@ -448,7 +449,134 @@ Resolution order: alias expansion → formation SOPs by name → built-in regist
 
 ---
 
-## 7. Artifacts
+## 7. Coding-agent delegation (`coding:`)
+
+Optional **top-level** `coding:` block declaring how the formation delegates coding tasks to an external **headless coding CLI** (Claude Code, droid, opencode, pi, ...). Like `rbac:`/`middleware:`, the block is framework-mode friendly — it works identically with or without a `server:` block.
+
+**Inert when absent.** No `coding:` block means no delegation tool is registered and nothing is constructed — runtimes **must** exhibit byte-identical behavior to a formation without the feature. Presence implies enablement.
+
+The block configures a runtime-registered delegation tool (`delegate_coding` in the reference implementation) with the signature `(prompt, workdir?, model?, continue_job_id?)`. MUXI ships the mechanism only: installation, authentication, and sandboxing of the CLI are the developer's responsibility, and vendor taxonomies (permission modes, safety levels, model names) pass through opaquely.
+
+```yaml
+coding:
+  client: claude-code            # bundled/formation-local adapter template name,
+                                 # OR the inline adapter form (mutually exclusive)
+  model: sonnet                  # optional default model (opaque vendor namespace)
+  workdirs: ["./workspace"]      # required; declared roots, load-validated
+  cleanup: delete                # delete (default) | keep
+  timeout: 30m                   # per-delegation ceiling; default 30m
+  max_concurrent: 3              # default 3
+  groups: []                     # allowlist; empty/absent = every group may delegate
+  extra_args:                    # verbatim vendor passthrough (permission/safety flags)
+    - "--permission-mode"
+    - "acceptEdits"
+  env:                           # the ONLY place ${{ secrets.* }} resolves
+    ANTHROPIC_API_KEY: "${{ secrets.ANTHROPIC_API_KEY }}"
+```
+
+Allowed keys: `client`, `command`, `args`, `output`, `parse`, `model`, `workdirs`, `cleanup`, `groups`, `extra_args`, `env`, `timeout`, `max_concurrent`. Unknown keys **must** fail formation load.
+
+### 7.1 Adapters: client reference vs inline form
+
+An **adapter** describes how to drive one CLI: the binary, its argument fragments, its output format, and how to extract values from that output. Adapters are declarative content, following the same convention as channel transformer templates (§2.8): runtimes ship **bundled dormant templates** (reference set: `claude-code`, `droid`, `opencode`, `pi`), inert until `coding.client:` references one by name.
+
+- `client:` **must** match `[a-zA-Z0-9_-]+` and resolve to a bundled template or a formation-local adapter file at `coding/<name>.yaml` (or `.yml`). A formation-local file **shadows** the bundled template of the same name — the same shadowing rule as built-in skills and channel transformers. A template file's `name:` field **must** match its filename stem.
+- The **inline form** is the escape hatch: the adapter keys (`command`, `args`, `output`, `parse`) appear directly on the `coding:` block. `client:` together with any inline adapter key **must** fail formation load; so must a block with neither.
+- The `coding/` directory is **not** auto-discovered (unlike §3 content-tier directories): an adapter file loads only when `coding.client:` names it.
+
+Adapter schema (template file or inline; allowed keys `name`, `command`, `args`, `output`, `parse`, `forbidden_extra_args` — unknown keys fail load):
+
+| Key | Required | Meaning |
+|-----|----------|---------|
+| `command` | yes | The CLI binary (bare name resolved on PATH, or an absolute path) |
+| `args.prompt` | yes | Arg fragment containing `{prompt}`, or the literal string `stdin` (prompt written to the subprocess's stdin — required for prompts past argv limits) |
+| `args.base` | no | Fragments always present, in order (e.g. `["--print", "--output-format", "stream-json"]`) |
+| `args.session` | no | ONE idempotent create-or-resume fragment containing `{id}` |
+| `args.session_new` / `args.session_resume` | no | Distinct create/resume pair, each containing `{id}` |
+| `args.model` | no | Fragment containing `{model}`; appended only when a model value is set |
+| `output` | no | `stream-json` \| `json` \| `text` (default `text`) — selects the output parser |
+| `parse.result` / `parse.session_id` | no | Extraction selectors applied to the vendor's JSON (§7.3) |
+| `forbidden_extra_args` | no | Flags that `coding.extra_args` **must not** contain (load-validated) |
+
+Every fragment is a non-empty list of strings, and each fragment **must** contain its placeholder (`{prompt}`, `{id}`, `{model}`).
+
+**Command assembly is an exec array, never a shell** (no injection surface): `command` + `args.base` + `args.model` (when a model is set) + session fragment + `extra_args` + `args.prompt` (or stdin).
+
+### 7.2 Session shapes
+
+An adapter declares exactly one of three session shapes; declaring `session` together with `session_new`/`session_resume` **must** fail load, as must `session_new` without `session_resume` (a session that can be created but never resumed is dead config).
+
+| Shape | Declaration | Id acquisition |
+|-------|-------------|----------------|
+| **Idempotent** | `session:` only | Runtime-generated: one flag serves create AND resume; the runtime generates the id on the first delegation (droid style) |
+| **Create/resume pair** | `session_new:` + `session_resume:` | Runtime-generated: distinct fragments for the first run and for resumption (claude-code style) |
+| **Captured-id** | `session_resume:` only | Tool-assigned: the first delegation runs with NO session flag and the runtime **captures** the id from parsed output via `parse.session_id` (opencode/pi style) |
+
+A captured-id adapter **must not** use `output: text` and **must** define `parse.session_id` — both are load errors. Session-id capture is **first-match**: the first event yielding a value wins, and later events carrying an unrelated id **must not** overwrite it.
+
+Whichever the shape, the vendor session id is persisted on the tracked job and replayed on continuation (`continue_job_id`); agents never see vendor session ids.
+
+### 7.3 Output modes and parse selectors
+
+`output:` selects the parser; `parse.result`/`parse.session_id` are dot-path selectors (`$.a.b`, list indexing via `[0]` or numeric segments, negative indices allowed — the same `parse:` idiom as triggers, §2.7).
+
+| Mode | Behavior |
+|------|----------|
+| `stream-json` | JSONL — one event per line; unparseable lines are skipped. Selectors apply to **each** event: `result` takes the **last non-empty** match (streams repeat/accumulate, the last wins); `session_id` takes the **first** match |
+| `json` | A single document on exit; selectors apply to it. Runtimes **should** fall back to the last parseable line when the CLI prepends informational output |
+| `text` | Opaque — the full stdout is the result; no extraction. `parse:` selectors together with `output: text` **must** fail load (dead config) |
+
+When a selector extracts nothing, the raw stdout **must** be kept as the result rather than dropped.
+
+### 7.4 Workdirs are disposable; git is the persistence layer
+
+`workdirs:` is **required**: a non-empty list of declared root directories (relative to the formation directory, or absolute). Each root **must** exist and be a directory at formation load (symlink-resolved).
+
+Every delegation runs in a **fresh, runtime-created `<root>/<user_id>/<request_id>` directory** as the subprocess working directory — never the root itself. Runtimes **must** also present that directory as the process's logical cwd in the environment (e.g. rewrite `PWD`), since some CLIs resolve their working directory from it. The tool's `workdir` parameter selects one of the declared roots (default: the first); a value outside the allowlist **must** be rejected as a tool error, never an exception.
+
+Nothing durable lives in a delegation directory — **git is the persistence layer**: ad-hoc tasks need nothing durable, new projects are git-inited and pushed by the tool, existing projects are cloned/coded/push-branched within the run. Consequently a resumed session gets a **fresh** directory: conversational continuity comes from the vendor session id, file continuity comes from git.
+
+`cleanup:` is `delete` (default — the directory is removed when the job reaches a terminal state) or `keep` (opt-in, debugging). Runtimes **should** run a TTL sweep removing stray directories left by crashed runs.
+
+Because the runtime owns the cwd, `extra_args` **must not** contain the tool's own cwd/worktree flags; adapters declare these via `forbidden_extra_args` and the load **must** fail on a match.
+
+### 7.5 Access, secrets, and passthrough
+
+- **`groups:`** — a resource-side allowlist gating who may delegate, as one unit (per-inner-tool modeling would require a stable vendor tool namespace). Empty or absent = every group may delegate. When RBAC is active (§5), each entry **must** name an existing group in `groups/` — validated at load, like `rbac.fallback`.
+- **Secrets placement rule:** `${{ secrets.* }}` resolves under `coding.env:` **only**. A secrets reference anywhere else in the block — `extra_args` especially — or anywhere in an adapter definition **must** fail formation load with an error pointing at `env:`. Rationale: argv is visible to every user on the host via `ps`; environment variables are not. One credential path means no command-line redaction machinery is needed; observability events never log env values.
+- **`extra_args:`** — verbatim vendor passthrough; this is where vendor permission/safety/autonomy flags live (`--permission-mode`, `--auto`, `--dangerously-skip-permissions`, ...). The standard does not model, translate, or validate them beyond the `forbidden_extra_args` check.
+- **`model:`** — an opaque, non-empty string in the vendor's namespace; overridable per call. Deliberately **not** integrated with `llm.aliases` or the model-selection hierarchy (§4.1). Setting `coding.model` when the adapter defines no `args.model` fragment **must** fail load.
+- **`env:`** — a mapping of string names to string values, passed to the subprocess environment verbatim (after secrets resolution).
+
+### 7.6 Execution contract: always asynchronous
+
+Delegation **must** be asynchronous — a fire-and-collect **tracked job**:
+
+- The delegation tool returns a job handle immediately (`{"job_id": ..., "status": "started"}`); the calling turn completes normally. Runtimes **must not** offer a synchronous mode or a sync escape hatch.
+- On completion the runtime synthesizes an internal request into the originating session with `route_class: delegation`, traversing the full middleware + RBAC pipeline (§5.1) like every other request.
+- Headless CLIs never block mid-task: a run that needs human input ends its turn with the question as its final message; the user's answer resumes the session via the continuation parameter. No pause/approval primitive exists.
+- `timeout:` (duration string — bare seconds or `ms`/`s`/`m`/`h`; default `30m`; must be positive) is the per-delegation ceiling. On expiry the runtime **must** kill the delegation's whole process group and mark the job timed out; the session id is retained, so post-timeout resumption is never blocked by the runtime.
+- `max_concurrent:` (integer ≥ 1, default 3) bounds concurrent delegations per formation; a delegation beyond the bound **must** be a friendly tool error, not a queue.
+- Cancellation kills the whole process group and retains the session id (the task stays resumable). Pause/resume need not be supported — a one-shot headless run has no meaningful pause.
+
+### 7.7 Fail-fast load validation
+
+All of these **must** fail formation load, never surface at delegation time:
+
+- `client:` names no bundled or formation-local adapter, and no inline adapter is given; `client:` alongside inline adapter keys
+- Adapter schema invalid (missing `command`/`args.prompt`; conflicting session shapes; `{prompt}`/`{id}`/`{model}` placeholders missing; unknown keys; captured-id adapter without `parse.session_id` or with `output: text`)
+- The adapter binary is absent (bare `command` not on PATH; absolute `command` missing or not executable) — the runtime verifies presence only; installing and authenticating the tool is the developer's business
+- Any `workdirs` root missing or not a directory; `workdirs` absent or empty
+- A `${{ secrets.* }}` reference outside `env:`
+- A `groups:` entry naming a group that does not exist in `groups/` (when RBAC is active)
+- `output` not one of `stream-json`/`json`/`text`; `cleanup` not one of `delete`/`keep`; `timeout` unparseable or non-positive; `max_concurrent` not an integer ≥ 1
+- `coding.model` set with no adapter `args.model` fragment; `extra_args` containing a `forbidden_extra_args` flag
+
+See `schemas/coding/` for the adapter template format and the annotated `claude-code` reference adapter.
+
+---
+
+## 8. Artifacts
 
 Optional `artifacts:` block controlling artifact capture and retention. Artifact capture is **on by default** (omit the block and you still get local artifact storage):
 
@@ -467,7 +595,7 @@ artifacts:
 
 ---
 
-## 8. Secrets and environment variables
+## 9. Secrets and environment variables
 
 - Secrets are referenced as: `${{ secrets.NAME }}`
 - Environment variables as: `${{ env.VAR }}`
@@ -476,7 +604,7 @@ Concrete storage and resolution are runtime-defined, but the syntax is standard.
 
 ---
 
-## 9. Init hook
+## 10. Init hook
 
 A Formation may include an `init` field containing a shell command that the runtime executes **before** any services are initialized. This is intended for one-time environment setup: creating directories, installing packages, seeding data, setting permissions, etc.
 
@@ -493,7 +621,7 @@ Rules:
 
 ---
 
-## 10. Extensions
+## 11. Extensions
 
 Agent Formation includes a standard `extensions` surface:
 
@@ -510,7 +638,7 @@ Rules:
 
 ---
 
-## 11. Backward compatibility
+## 12. Backward compatibility
 
 - Patch/minor releases are backward compatible.
 - Major releases may break compatibility and must include migration notes.

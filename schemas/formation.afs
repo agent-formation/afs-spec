@@ -573,6 +573,61 @@ commands:
   builtin:
     reset: false              # hide the built-in /reset (unknown names fail validation)
 
+# Coding-agent delegation (optional) -- TOP-LEVEL block. Presence registers
+# one always-asynchronous delegation tool that spawns the configured
+# headless coding CLI (claude-code, droid, opencode, pi, ...) as a tracked
+# background job; absence means nothing is constructed (inert). The runtime
+# only verifies the binary exists at load -- installing, authenticating,
+# and sandboxing the tool is the developer's business. See specs/formation.md
+# §7 and schemas/coding/ for the adapter template format.
+#
+# coding:
+#   client: claude-code         # bundled adapter template name, or a
+#                               # formation-local coding/<name>.yaml (shadows
+#                               # the bundled one). Mutually exclusive with
+#                               # the inline adapter form below.
+#   # --- inline adapter form (escape hatch; same schema as a template) ---
+#   # command: "droid"
+#   # args:
+#   #   base: ["exec", "--output-format", "json"]  # always present, in order
+#   #   prompt: ["{prompt}"]                       # or the literal string "stdin"
+#   #   session: ["--session-id", "{id}"]          # ONE idempotent create-or-resume flag, OR:
+#   #   session_new: ["--session-id", "{id}"]      #   distinct create/resume pair
+#   #   session_resume: ["--resume", "{id}"]       #   (session_resume ALONE = tool-assigned id,
+#   #                                              #    captured via parse.session_id)
+#   #   model: ["--model", "{model}"]              # appended only when a model value is set
+#   # output: stream-json       # stream-json | json | text -> selects the parser
+#   # parse:                    # dot-path selectors (same idiom as trigger parse:)
+#   #   result: "$.result"      # stream-json: last non-empty match wins
+#   #   session_id: "$.session_id"  # first match wins
+#   model: "sonnet"             # optional default; OPAQUE vendor namespace (not
+#                               # llm.aliases) -- overridable per delegation call
+#   workdirs: ["./workspace"]   # REQUIRED. Declared roots (relative to the
+#                               # formation dir or absolute); each must exist at
+#                               # load. Every delegation runs in a fresh
+#                               # <root>/<user_id>/<request_id> subdirectory --
+#                               # never the root itself. Disposable: git is the
+#                               # persistence layer (resumed sessions get a
+#                               # FRESH directory; file continuity via git).
+#   cleanup: delete             # delete (default: remove dir on terminal state;
+#                               # TTL sweep catches crashed runs) | keep (debugging)
+#   timeout: 30m                # per-delegation ceiling (default 30m). On expiry
+#                               # the process group is killed; the session id is
+#                               # retained so the task stays resumable.
+#   max_concurrent: 3           # default 3; overflow is a friendly tool error
+#   groups: []                  # resource-side allowlist gating who may delegate;
+#                               # empty/absent = every group. Names must exist in
+#                               # groups/ when RBAC is active (load-validated).
+#   extra_args:                 # verbatim vendor passthrough -- permission/safety/
+#     - "--permission-mode"     # autonomy flags live here (never modeled by the
+#     - "acceptEdits"           # standard). The tool's own cwd/worktree flags are
+#                               # rejected at load (adapter forbidden_extra_args).
+#   env:                        # the ONLY place ${{ secrets.* }} resolves --
+#                               # anywhere else in the block (extra_args
+#                               # especially) fails the load (argv is ps-visible;
+#                               # the environment is not).
+#     ANTHROPIC_API_KEY: "${{ secrets.ANTHROPIC_API_KEY }}"
+
 # A2A Configuration (optional, enabled by default)
 a2a:
   enabled: true  # (default - A2A is enabled if not explicitly disabled)

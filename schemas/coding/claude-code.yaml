@@ -1,0 +1,38 @@
+# Coding adapter template: claude-code (the canonical reference adapter).
+#
+# Runtimes bundle this as a dormant template -- inert until a formation
+# activates it with `coding.client: claude-code`. A formation-local copy
+# of this file at coding/claude-code.yaml SHADOWS the bundled template
+# (use that to pin different flags when vendor releases drift).
+#
+# Adapter files use the .yaml/.yml extension and the `name:` field must
+# match the filename stem.
+#
+# Installation and authentication are the developer's business -- the
+# runtime only verifies the binary is present at formation load.
+#
+# Tested against: Claude Code CLI 2.x (--print, --output-format
+# stream-json, --verbose, --session-id <uuid> [create; must be a valid
+# UUID], --resume <id>, --model <alias-or-full-name>).
+#
+# Session shape: distinct create/resume pair -- the runtime generates the
+# UUID for the first delegation and persists it on the tracked job.
+#
+# Vendor permission/safety surface goes through coding.extra_args
+# (passthrough only): --permission-mode, --allowedTools/--disallowedTools,
+# --dangerously-skip-permissions, --max-turns, --max-budget-usd.
+name: claude-code
+command: claude
+args:
+  base: ["--print", "--output-format", "stream-json", "--verbose"]
+  prompt: stdin
+  session_new: ["--session-id", "{id}"]
+  session_resume: ["--resume", "{id}"]
+  model: ["--model", "{model}"]
+output: stream-json
+parse:
+  result: "$.result"
+  session_id: "$.session_id"
+# The runtime sets the subprocess cwd (fresh <root>/<user_id>/<request_id>
+# directory); flags that would move it are rejected at load.
+forbidden_extra_args: ["-w", "--worktree"]
