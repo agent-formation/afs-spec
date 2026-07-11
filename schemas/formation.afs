@@ -573,6 +573,21 @@ commands:
   builtin:
     reset: false              # hide the built-in /reset (unknown names fail validation)
 
+# Declared links (optional) -- TOP-LEVEL mapping of name -> {label, url, hint}
+# declaring external destinations (credential portals, OAuth consent pages,
+# dashboards) that response producers may surface as `action_link` widgets in
+# the response envelope's `ui` array with formation-config provenance.
+# An action_link URL is never LLM-fabricated: it can only come from a declared
+# link, a tool result, or a trigger payload. See specs/formation.md §9.
+#
+# links:
+#   jira:
+#     label: "Connect Jira"                          # optional display label
+#     url: "https://auth.acme.com/connect/jira"      # REQUIRED; http(s) only
+#     hint: "Opens your company's credential portal" # optional one-liner
+#   status:
+#     url: "https://status.acme.com"
+
 # Coding-agent delegation (optional) -- TOP-LEVEL block. Presence registers
 # one always-asynchronous delegation tool that spawns the configured
 # headless coding CLI (claude-code, droid, opencode, pi, ...) as a tracked
@@ -736,6 +751,27 @@ mcp:
 
   # Message enhancement for better tool selection
   enhance_user_prompts: true          # Use LLM to enhance ambiguous messages for tool selection
+
+  # Remote job watching (optional) -- configures the runtime-registered
+  # watch_job tool, which polls an MCP status tool at a fixed cadence until a
+  # deterministic terminal condition (done_when: path + equals/in) and
+  # re-enters the result into the originating conversation. Default ON iff
+  # this formation declares mcp.servers below (a watch: block without servers
+  # is dead config and fails the load). Polls run under the original caller's
+  # own permission context -- the tool grants no new capability. Cadence and
+  # deadline are formation configuration, NEVER tool arguments. There is no
+  # enabled: key; disable with the one-liner:  watch: false
+  # See specs/formation.md §8.
+  #
+  # watch:                            # optional; all keys optional (closed set)
+  #   interval: 30                    # THE poll cadence (seconds; positive number)
+  #   timeout: 7200                   # THE watch deadline (seconds; positive number)
+  #   max_concurrent: 10              # active watches PER USER (integer >= 1).
+  #                                   # Governs watches only. Groups may override
+  #                                   # (mcp.watch.max_concurrent in a group file;
+  #                                   # highest of a user's groups wins).
+  #   max_consecutive_failures: 3     # consecutive poll errors before the watch
+  #                                   # fails with the last error (integer >= 1)
 
   # MCP server declarations
   # List MCP server IDs to load from the mcp/ directory.
