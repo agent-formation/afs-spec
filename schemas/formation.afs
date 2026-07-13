@@ -573,6 +573,22 @@ commands:
   builtin:
     reset: false              # hide the built-in /reset (unknown names fail validation)
 
+# Self-improvement (optional) -- ON BY DEFAULT: an absent block means the
+# tuning loop runs with these defaults. One scheduled in-runtime loop
+# digests operational activity and curates MUXI.md (the formation's file
+# of learned operational guidance, auto-discovered next to the formation
+# file like SOUL.md, injected into every turn, hand-editable, 32KB max).
+# The loop NEVER edits formation configuration -- deployment-shaped ideas
+# only surface as prose recommendations. Closed key set: unknown keys
+# fail the load. Boolean shorthand: `tuning: false` == {active: false}.
+# See specs/formation.md §11.
+tuning:
+  active: true                # default true -- the whole loop's off switch
+  interval_hours: 24          # positive number; one loop pass per interval
+  auto_apply: true            # false: revisions await human review as
+                              # PENDING-MUXI.md (a sibling, never injected;
+                              # review = diff, accept promotes it to live)
+
 # Declared links (optional) -- TOP-LEVEL mapping of name -> {label, url, hint}
 # declaring external destinations (credential portals, OAuth consent pages,
 # dashboards) that response producers may surface as `action_link` widgets in

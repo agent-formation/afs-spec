@@ -49,6 +49,8 @@ The overlord's persona (identity, tone, values) comes from a **soul document**, 
 
 The first source found wins; the rest are ignored. The document's content is used verbatim (no templating). Soul is overlord-only — individual agents do not accept a soul document (see §2.2).
 
+A second auto-discovered document may live beside the soul: `MUXI.md`, the formation's curated operational learnings (who the formation *is* lives in `SOUL.md`; what it has *learned* lives in `MUXI.md`). See §11.2.
+
 ### 2.2 Agents
 Agents are declared under `agents/` and referenced by the Formation.
 
@@ -785,7 +787,44 @@ artifacts:
 
 ---
 
-## 11. Secrets and environment variables
+## 11. Self-improvement (`tuning:` + `MUXI.md`)
+
+A formation improves itself by reading its own logs: one scheduled in-runtime loop digests operational activity, distills behavioral learnings, and curates `MUXI.md` — a bounded markdown file of operational guidance injected into every turn's context beside the soul. **On by default**: an absent block means the loop runs with the defaults below.
+
+The loop **never** edits formation configuration. Anything requiring a deployment (yaml changes, plan upgrades, new tools) may only surface as prose recommendations to a human. Configuration stays static until restart.
+
+### 11.1 `tuning:` block
+
+```yaml
+tuning:
+  active: true          # default true -- the whole loop's off switch
+  interval_hours: 24    # positive number; one loop pass per interval
+  auto_apply: true      # false: revisions await human review (PENDING-MUXI.md)
+```
+
+Rules:
+- **Closed key set** — exactly these three keys; unknown keys **must** fail the load.
+- `active` and `auto_apply` are strict booleans; `interval_hours` is a positive number (booleans rejected where numbers are expected). All validation is fail-fast at load, never a tuning-time surprise.
+- Boolean shorthand: `tuning: false` ≡ `{active: false}`; `tuning: true` ≡ the defaults.
+- The loop's internals — what it observes (event capture, log digestion, benchmark-style probes) and how it distills — are runtime behavior, deliberately **not** configuration. They introduce no schema surface beyond this block.
+
+### 11.2 Formation learnings (`MUXI.md`)
+
+`MUXI.md` is the formation's file of learned operational guidance (routing habits, tool quirks, cost hotspots) — formation-owned, git-trackable, and hand-editable: a developer may write it by hand on day one and get value with no loop involved. Discovery mirrors the soul document (§2.1.1):
+
+1. `MUXI.md` next to the formation file
+2. `muxi.md` next to the formation file
+
+Contract:
+- **Injected verbatim** (no templating) into every turn's context wherever the soul is injected, so it **must** stay concise and general.
+- **Bounded**: 32KB maximum, enforced at every write surface — an oversize revision is rejected, never truncated.
+- **Hand edits take effect on the next turn**, without a restart; runtime writes land on the discovered file (canonical name `MUXI.md` when creating).
+- **Privacy**: the file is injected into every user's context; runtimes **must** prevent loop-written revisions from carrying user identifiers or message content. Operational specifics (tool names, models, time windows) are the point and are not restricted.
+- Under `auto_apply: false` the loop writes its suggested next version to **`PENDING-MUXI.md`** (a sibling, never injected); review is a diff of the two files. Accepting promotes pending to live; dismissing discards it. How acceptance is surfaced (commands, API, chat widgets) is runtime UX, not schema.
+
+---
+
+## 12. Secrets and environment variables
 
 - Secrets are referenced as: `${{ secrets.NAME }}`
 - Environment variables as: `${{ env.VAR }}`
@@ -794,7 +833,7 @@ Concrete storage and resolution are runtime-defined, but the syntax is standard.
 
 ---
 
-## 12. Init hook
+## 13. Init hook
 
 A Formation may include an `init` field containing a shell command that the runtime executes **before** any services are initialized. This is intended for one-time environment setup: creating directories, installing packages, seeding data, setting permissions, etc.
 
@@ -811,7 +850,7 @@ Rules:
 
 ---
 
-## 13. Extensions
+## 14. Extensions
 
 Agent Formation includes a standard `extensions` surface:
 
@@ -828,7 +867,7 @@ Rules:
 
 ---
 
-## 14. Backward compatibility
+## 15. Backward compatibility
 
 - Patch/minor releases are backward compatible.
 - Major releases may break compatibility and must include migration notes.

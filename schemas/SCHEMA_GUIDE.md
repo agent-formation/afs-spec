@@ -50,6 +50,7 @@ This guide documents the complete schema structure for Agent Formation, includin
 - [Scheduler Configuration](#scheduler-configuration)
 - [Proactive Configuration](#proactive-configuration)
 - [Commands Configuration](#commands-configuration)
+- [Tuning Configuration (`tuning:`)](#tuning-configuration-tuning)
 - [Artifacts Configuration](#artifacts-configuration)
 - [Links Configuration (`links:`)](#links-configuration-links)
 - [Coding Delegation Configuration (`coding:`)](#coding-delegation-configuration-coding)
@@ -110,6 +111,7 @@ This guide documents the complete schema structure for Agent Formation, includin
 - [Coding Delegation Validation](#coding-delegation-validation)
 - [Watch Validation](#watch-validation)
 - [Links Validation](#links-validation)
+- [Tuning Validation](#tuning-validation)
 - [Group Validation](#group-validation)
 - [🎯 Best Practices](#-best-practices)
 - [Schema Compliance](#schema-compliance)
@@ -582,6 +584,28 @@ commands:
 | `commands.builtin` | ❌ No | map | {} | Built-in name → boolean; `false` hides it; unknown names fail validation |
 
 Resolution order: alias expansion → formation SOPs by name (**a formation SOP shadows a built-in command of the same name**) → built-in registry. Reference built-in set: `setup`, `help`, `status`, `jobs`, `identity`, `channels`, `preferences`, `reset`.
+
+---
+
+### Tuning Configuration (`tuning:`)
+*Self-improvement loop and the `MUXI.md` learnings file — ON by default*
+
+```yaml
+tuning:
+  active: true          # the whole loop's off switch
+  interval_hours: 24    # one loop pass per interval
+  auto_apply: true      # false: revisions await review as PENDING-MUXI.md
+```
+
+| Field | Required | Type | Default | Description |
+|-------|----------|------|---------|-------------|
+| `tuning.active` | ❌ No | boolean | true | Whole-loop off switch; an absent block means the loop is ON with defaults |
+| `tuning.interval_hours` | ❌ No | positive number | 24 | Hours between loop passes |
+| `tuning.auto_apply` | ❌ No | boolean | true | `true`: revisions land in the live `MUXI.md`; `false`: revisions await human review as `PENDING-MUXI.md` |
+
+Boolean shorthand: `tuning: false` ≡ `{active: false}`; `tuning: true` ≡ the defaults.
+
+`MUXI.md` is auto-discovered next to the formation file (`MUXI.md`, then `muxi.md` — the `SOUL.md` idiom), injected verbatim into every turn's context beside the soul, hand-editable without a restart, and bounded at 32KB (oversize writes rejected, never truncated). The loop never edits formation configuration — deployment-shaped ideas only surface as prose recommendations. Loop internals (what it observes, how it distills) are runtime behavior with no schema surface. See `specs/formation.md` §11.
 
 ---
 
@@ -1357,6 +1381,13 @@ All of these fail formation load — never a watch-time surprise:
 - ✅ Every entry must be a mapping with a `url` field
 - ✅ `url` must be an `http://` or `https://` URL
 - ✅ `label` and `hint` (if present) must be strings
+
+### Tuning Validation
+All of these fail formation load — never a tuning-time surprise:
+- ✅ `tuning` must be a mapping or a boolean (`false` ≡ `{active: false}`, `true` ≡ defaults)
+- ✅ Keys limited to `active`, `interval_hours`, `auto_apply` (closed set)
+- ✅ `active` and `auto_apply` must be booleans
+- ✅ `interval_hours` must be a positive number; a boolean is rejected where a number is expected
 
 ### Group Validation
 - ✅ Top-level keys limited to `name`, `description`, `inherits`, `agents`, `mcp_servers`, `triggers`, `sops`, `native_apps`, `memory`, `mcp`
