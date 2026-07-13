@@ -51,6 +51,8 @@ This guide documents the complete schema structure for Agent Formation, includin
 - [Proactive Configuration](#proactive-configuration)
 - [Commands Configuration](#commands-configuration)
 - [Artifacts Configuration](#artifacts-configuration)
+- [Coding Delegation Configuration (`coding:`)](#coding-delegation-configuration-coding)
+  - [The Adapter Schema](#the-adapter-schema)
 - [A2A Configuration](#a2a-configuration)
   - [A2A General Configuration](#a2a-general-configuration)
   - [A2A Outbound Configuration](#a2a-outbound-configuration)
@@ -101,6 +103,7 @@ This guide documents the complete schema structure for Agent Formation, includin
 - [SOP Validation](#sop-validation)
 - [Trigger Validation](#trigger-validation)
 - [Transformer Validation](#transformer-validation)
+- [Coding Delegation Validation](#coding-delegation-validation)
 - [Group Validation](#group-validation)
 - [🎯 Best Practices](#-best-practices)
 - [Schema Compliance](#schema-compliance)
@@ -226,7 +229,7 @@ The middleware **must** be an actual MCP server (stdio or http) exposing exactly
 
 - **Input:** the full request payload — `user_id`, `message`, `attachments`, `metadata`, `route_class` — as the tool arguments. `groups` is **never** part of the inbound payload; an input schema declaring it fails formation load. Groups can only be attached on the way out, so they can never arrive as a caller's claim.
 - **Output:** the same-shaped payload, possibly modified, plus an optional `groups` list of group ids — the **only** channel through which memberships enter the runtime. Identity mapping (rewriting `user_id`) and payload policy are permitted; `route_class` must be echoed unchanged. Every response is validated against the request schema before the runtime continues with it.
-- **`route_class`** identifies the origin: external routes (`chat`, `audiochat`, `trigger`, `api`) and the internal origins `heartbeat` and `scheduler` — internal requests traverse the middleware identically, no special cases.
+- **`route_class`** identifies the origin: external routes (`chat`, `audiochat`, `trigger`, `api`) and the internal origins `heartbeat`, `scheduler`, and `delegation` (coding-delegation completion re-entry) — internal requests traverse the middleware identically, no special cases.
 
 **Fail-closed:** a middleware error, timeout, or malformed/schema-invalid response rejects the request. `rbac.fallback` does not apply to errors — a fallback on error would let an identity-provider outage silently reassign users to the fallback group. **No runtime-side caching:** the middleware is called on every request; respond fast, cache internally if needed.
 
@@ -594,6 +597,82 @@ artifacts:
 | `artifacts.encryption.enabled` | ❌ No | boolean | true | Encrypt stored artifacts |
 | `artifacts.retention.policy` | ❌ No | string | "last_accessed" | `last_accessed` or `last_updated` |
 | `artifacts.retention.duration` | ❌ No | integer | 0 | Retention window in days; `0` = keep forever |
+
+---
+
+### Coding Delegation Configuration (`coding:`)
+*Delegate coding tasks to an external headless coding CLI as tracked background jobs*
+
+A **top-level** block (framework-mode friendly, like `rbac:`/`middleware:`). Presence registers one always-asynchronous delegation tool (`delegate_coding(prompt, workdir?, model?, continue_job_id?)` in the reference implementation); **absence means nothing is constructed** — no tool, byte-identical behavior. The runtime verifies the CLI binary exists at load; installing, authenticating, and sandboxing it is the developer's responsibility, and vendor taxonomies (permission modes, safety levels, model names) pass through opaquely.
+
+```yaml
+coding:
+  client: claude-code            # bundled adapter template (reference set:
+                                 # claude-code, droid, opencode, pi), or a
+                                 # formation-local coding/<name>.yaml (shadows
+                                 # the bundled one). Mutually exclusive with
+                                 # the inline adapter form.
+  model: sonnet                  # optional default; opaque vendor namespace
+  workdirs: ["./workspace"]      # required; declared roots, must exist at load
+  cleanup: delete                # delete (default) | keep
+  timeout: 30m                   # per-delegation ceiling (default 30m)
+  max_concurrent: 3              # default 3
+  groups: []                     # allowlist; empty/absent = everyone may delegate
+  extra_args:                    # verbatim vendor passthrough (safety flags)
+    - "--permission-mode"
+    - "acceptEdits"
+  env:                           # the ONLY place ${{ secrets.* }} resolves
+    ANTHROPIC_API_KEY: "${{ secrets.ANTHROPIC_API_KEY }}"
+```
+
+| Field | Required | Type | Default | Description |
+|-------|----------|------|---------|-------------|
+| `coding.client` | ❌ Conditional | string | None | Adapter template name (`[a-zA-Z0-9_-]+`): formation-local `coding/<name>.yaml` shadows the bundled template. Mutually exclusive with the inline adapter keys; one of the two is required |
+| `coding.command` / `coding.args` / `coding.output` / `coding.parse` | ❌ Conditional | — | — | Inline adapter form (escape hatch); same schema as a template file (below) |
+| `coding.model` | ❌ No | string | None | Default model value — **opaque vendor namespace** (not `llm.aliases`); overridable per delegation call. Requires the adapter to define an `args.model` fragment |
+| `coding.workdirs` | ✅ Yes | list | — | Declared root directories (relative to the formation dir or absolute); each must exist at load (symlink-resolved). Every delegation runs in a fresh `<root>/<user_id>/<request_id>` subdirectory as subprocess cwd — never the root itself. The tool's `workdir` param selects a declared root (default: the first) |
+| `coding.cleanup` | ❌ No | string | `delete` | `delete`: remove the delegation directory on terminal state (a TTL sweep catches directories orphaned by crashed runs). `keep`: opt-in for debugging |
+| `coding.timeout` | ❌ No | duration | `30m` | Per-delegation ceiling (bare seconds or `ms`/`s`/`m`/`h`; must be positive). On expiry the process group is killed and the job marked timed out; the session id is retained (the task stays resumable) |
+| `coding.max_concurrent` | ❌ No | integer | 3 | Concurrent delegations per formation (≥ 1); overflow is a friendly tool error, not a queue |
+| `coding.groups` | ❌ No | list | `[]` | Resource-side allowlist gating who may delegate (as one unit). Empty/absent = every group. Each name must exist in `groups/` when RBAC is active |
+| `coding.extra_args` | ❌ No | list | `[]` | Verbatim vendor passthrough — permission/safety/autonomy flags (`--permission-mode`, `--auto`, `--dangerously-skip-permissions`, ...). Never modeled by the standard. Flags in the adapter's `forbidden_extra_args` (cwd/worktree flags) fail the load |
+| `coding.env` | ❌ No | map | `{}` | String → string subprocess environment. **The only place `${{ secrets.* }}` resolves** — a secrets reference anywhere else in the block fails the load pointing at `env:` (argv is `ps`-visible; the environment is not) |
+
+Unknown keys on `coding:` fail the load.
+
+#### The Adapter Schema
+
+An adapter (bundled template, formation-local `coding/<name>.yaml`, or inline) drives one CLI. Allowed keys: `name` (templates only; must match the filename stem), `command`, `args`, `output`, `parse`, `forbidden_extra_args`.
+
+| Key | Required | Description |
+|-----|----------|-------------|
+| `command` | ✅ Yes | The CLI binary — bare name (resolved on PATH) or absolute path |
+| `args.prompt` | ✅ Yes | Fragment containing `{prompt}`, or the literal string `stdin` (prompt written to stdin — required past argv limits) |
+| `args.base` | ❌ No | Fragments always present, in order |
+| `args.session` | ❌ No | ONE idempotent create-or-resume fragment containing `{id}` |
+| `args.session_new` / `args.session_resume` | ❌ No | Distinct create/resume pair, each containing `{id}` |
+| `args.model` | ❌ No | Fragment containing `{model}`; appended only when a model value is set |
+| `output` | ❌ No | `stream-json` \| `json` \| `text` (default `text`) — selects the output parser |
+| `parse.result` / `parse.session_id` | ❌ No | Dot-path selectors over the vendor's JSON (same idiom as trigger `parse:`; negative list indices allowed) |
+| `forbidden_extra_args` | ❌ No | Flags `coding.extra_args` must not contain (the runtime owns the cwd) |
+
+**Command assembly is an exec array, never a shell:** `command` + `args.base` + `args.model` (when a model is set) + session fragment + `extra_args` + `args.prompt` (or stdin).
+
+**Session shapes** — exactly one of three per adapter:
+
+| Shape | Declaration | Id acquisition |
+|-------|-------------|----------------|
+| Idempotent | `session:` only | Runtime-generated; one flag serves create AND resume (droid) |
+| Create/resume pair | `session_new:` + `session_resume:` | Runtime-generated; distinct fragments (claude-code) |
+| Captured-id | `session_resume:` only | Tool-assigned; the first run gets NO session flag, the id is captured from output via `parse.session_id` (opencode, pi) |
+
+A captured-id adapter cannot use `output: text` and requires `parse.session_id`. Session-id capture is **first-match** (later events never clobber it); in `stream-json` mode the `result` selector takes the **last non-empty** match across events. The persisted session id is replayed on continuation (`continue_job_id`); agents never see vendor session ids.
+
+**Disposable workdirs; git is the persistence layer.** Nothing durable lives in a delegation directory: ad-hoc tasks need nothing durable, new projects are git-inited and pushed by the tool, existing projects are cloned/coded/push-branched within the run. A resumed session gets a **fresh** directory — conversational continuity is the vendor session id, file continuity is git. The runtime sets the subprocess cwd (and its `PWD`) to the delegation directory.
+
+**Always asynchronous.** The tool returns `{"job_id": ..., "status": "started"}` immediately; there is no synchronous mode and none may be offered. Completion re-enters the originating session as an internal request (`route_class: delegation`) through the full middleware + RBAC pipeline; a run that needs human input simply ends with the question as its final message, and the user's answer resumes the session via `continue_job_id`.
+
+See `schemas/coding/` for the annotated `claude-code` reference adapter and `specs/formation.md` §7 for the normative text.
 
 ---
 
@@ -1143,6 +1222,24 @@ Rules:
 - ✅ `endpoint.method` (if present) must be `GET`, `POST`, `PUT`, `PATCH`, or `DELETE`
 - ✅ `auth.type` (if present) must be `bearer`, `basic`, or `header`, with its required fields present
 - ✅ `content_transform.format` (if present) must be `text`, `markdown`, or `html`
+
+### Coding Delegation Validation
+All of these fail formation load — never a delegation-time surprise:
+- ✅ Keys limited to `client`, `command`, `args`, `output`, `parse`, `model`, `workdirs`, `cleanup`, `groups`, `extra_args`, `env`, `timeout`, `max_concurrent`
+- ✅ Exactly one adapter source: `client` (matching `[a-zA-Z0-9_-]+`, resolving to a bundled template or formation-local `coding/<name>.yaml`) OR the inline adapter form — both or neither fails
+- ✅ Adapter keys limited to `name`, `command`, `args`, `output`, `parse`, `forbidden_extra_args`; `args` keys to `base`, `prompt`, `session`, `session_new`, `session_resume`, `model`; `parse` keys to `result`, `session_id`
+- ✅ A template file's `name` must match its filename stem
+- ✅ `args.prompt` is required (fragment containing `{prompt}`, or the literal string `stdin`); fragments are non-empty string lists containing their placeholder (`{prompt}`/`{id}`/`{model}`)
+- ✅ Session shapes are exclusive: `session` together with `session_new`/`session_resume` fails; `session_new` without `session_resume` fails (dead config)
+- ✅ A captured-id adapter (`session_resume` only) must define `parse.session_id` and must not use `output: text`
+- ✅ `output` must be `stream-json`, `json`, or `text`; `parse:` selectors together with `output: text` fail (dead config)
+- ✅ `${{ secrets.* }}` resolves under `coding.env` ONLY — a reference anywhere else in the block (`extra_args` especially) or in an adapter definition fails with an error pointing at `env:`
+- ✅ `workdirs` is required and non-empty; every root must exist and be a directory at load (symlink-resolved)
+- ✅ `cleanup` must be `delete` or `keep`; `timeout` must parse as a positive duration; `max_concurrent` must be an integer ≥ 1
+- ✅ `coding.model` requires the adapter to define an `args.model` fragment
+- ✅ `extra_args` must not contain any adapter `forbidden_extra_args` flag (the runtime owns the subprocess cwd)
+- ✅ The adapter binary must be present (bare `command` on PATH; absolute `command` an executable file) — presence only; install/auth is the developer's business
+- ✅ When RBAC is active, every `coding.groups` entry must name an existing group in `groups/`
 
 ### Group Validation
 - ✅ Top-level keys limited to `name`, `description`, `inherits`, `agents`, `mcp_servers`, `triggers`, `sops`, `native_apps`, `memory`

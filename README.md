@@ -75,6 +75,8 @@ Both are fully supported and functionally identical. Use `.afs` for clarity in p
 │   │   └── slack-bridge.afs
 │   ├── groups/               # Access-control group templates
 │   │   └── analyst.afs
+│   ├── coding/               # Coding-delegation adapter templates
+│   │   └── claude-code.yaml
 │   └── knowledge/            # Knowledge base files directory
 │       └── README.md
 ├── specs/                    # Specification documents
@@ -124,6 +126,9 @@ Formation files describe **complete agent systems** with modular components:
 - **Groups** (`groups/*.afs`)
   Access-control groups: per-group agent/trigger/SOP grants and tool overrides. Auto-discovered; memberships arrive per request via the formation's request middleware (`rbac` + `middleware` blocks).
 
+- **Coding adapters** (`coding/*.yaml`)
+  Adapter templates for delegating coding tasks to external headless CLIs (Claude Code, droid, opencode, pi) via the top-level `coding:` block. Not auto-discovered — loaded only when `coding.client:` names one; a formation-local file shadows the bundled template.
+
 - **Knowledge** (`knowledge/`)
   Portable knowledge assets.
 
@@ -161,6 +166,7 @@ Formation files describe **complete agent systems** with modular components:
 | Trigger | `schemas/triggers/*.md` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
 | Transformer | `schemas/transformers/*.afs` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
 | Group | `schemas/groups/*.afs` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
+| Coding adapter | `schemas/coding/*.yaml` | [SCHEMA_GUIDE.md](schemas/SCHEMA_GUIDE.md) |
 
 ---
 

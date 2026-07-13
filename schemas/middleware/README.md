@@ -65,7 +65,7 @@ Rules:
 
 - The returned payload may be modified: identity mapping (rewriting `user_id`) and payload policy are permitted. `route_class` must be echoed unchanged.
 - `groups` in the response is the **only** channel through which memberships enter the runtime — no request-asserted form, therefore no precedence rules.
-- `route_class` identifies the origin: external routes (`chat`, `audiochat`, `trigger`, `api`) and the internal origins `heartbeat` and `scheduler`. Internal requests synthesize the same payload and traverse the middleware identically — no special cases.
+- `route_class` identifies the origin: external routes (`chat`, `audiochat`, `trigger`, `api`) and the internal origins `heartbeat`, `scheduler`, and `delegation` (coding-delegation completion re-entry, see `schemas/coding/`). Internal requests synthesize the same payload and traverse the middleware identically — no special cases.
 - Binary attachment content is base64-round-tripped (a `content_encoding: base64` marker on the attachment object).
 - The middleware's only voice into the request is the returned payload; middleware wanting to persist context does so through the public API.
 
