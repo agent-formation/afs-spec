@@ -85,6 +85,14 @@ They can represent:
 - external APIs
 - background capabilities
 
+**Authentication.** Both directions share the static schemes (`api_key`, `bearer`, `basic`, `custom`, `none`) and add one dynamic scheme each, deliberately asymmetric because the trust problems differ:
+
+- Outbound `hmac` / inbound `hmac`: requests carry a timestamp header (unix seconds) and a signature header holding HMAC-SHA256(secret, timestamp) as hex. The sender signs fresh per request; the receiver verifies with a constant-time comparison, rejects timestamps outside a tolerance window (default 300s), and rejects a replayed signature within it. The body is not signed — transport integrity is TLS's job; the signature proves possession of the shared secret.
+- Outbound `oauth2`: a client_credentials grant against the service's `token_url`; tokens are cached per service, refreshed before expiry, and sent as a standard Bearer header.
+- Inbound `openid`: callers present a Bearer JWT, validated against the issuer's JWKS (issuer, audience when configured, algorithm, expiry, bounded clock skew). No shared key at rest; the caller's identity is the token's subject.
+
+An inbound server enforces its declared mode strictly: a formation expecting `hmac` rejects bearer or api-key attempts (and vice versa) rather than falling through. `oauth2` is outbound-only and `openid` inbound-only — declaring them on the wrong side fails formation load with a hint naming the counterpart.
+
 ### 2.5 Skills
 Skills are reusable agent capabilities following the [Agent Skills specification](https://agentskills.io/specification).
 

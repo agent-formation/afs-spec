@@ -1479,6 +1479,12 @@ Rules:
 - ✅ Must have `schema`, `id`, `url`
 - ✅ Auth configurations must be complete
 - ✅ URLs must be valid
+- ✅ Outbound (service) `auth.type` must be `api_key`, `bearer`, `basic`, `custom`, `hmac`, `oauth2`, or `none` — `openid` is inbound-only
+- ✅ Inbound `auth.type` must be `api_key`, `bearer`, `basic`, `custom`, `hmac`, `openid`, or `none` — `oauth2` is outbound-only
+- ✅ Per-type required fields: `api_key` needs `key`; `bearer` needs `token`; `basic` needs `username` + `password`; `custom` needs a `headers` map; `hmac` needs `secret`; `oauth2` needs `client_id` + `client_secret` + `token_url`; `openid` needs `issuer` (http(s) URL)
+- ✅ `hmac` optional fields: outbound `signature_header`/`timestamp_header` must be strings; inbound `timestamp_tolerance` must be a positive integer
+- ✅ `openid` optional fields: `audience`/`jwks_url` must be strings, `allowed_algorithms` a list of strings, `clock_skew_seconds` a non-negative integer
+- ✅ `oauth2` optional `scope` must be a string
 
 ### SOP Validation
 - ✅ Frontmatter must declare `type: sop` (other markdown files in `sops/` are treated as resources)
