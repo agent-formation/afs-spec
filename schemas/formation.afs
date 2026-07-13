@@ -309,6 +309,23 @@ overlord:
                                 # Hard ceiling to prevent runaway workflows
                                 # Workflows exceeding this limit will fail with timeout error
 
+    # Workflow-level replanning (optional) -- OFF BY DEFAULT. When a workflow
+    # fails after task-level recovery (retries, fallbacks) is exhausted,
+    # replanning asks the decomposer for a fundamentally different plan that
+    # avoids the observed failure modes. Unknown keys fail the load.
+    replanning:
+      enabled: false                    # default false (byte-identical behavior)
+      max_attempts: 3                   # per original workflow (1-10)
+      plan_similarity_threshold: 0.7    # 0-1; plans this similar to the failed
+                                        # one are rejected as duplicates
+      preserve_successful_outputs: true # feed completed task results into the
+                                        # replan context (no redone work)
+      replan_timeout_seconds: 30        # ceiling for generating the new plan
+      # non_replannable_error_patterns: # case-insensitive substrings marking
+      #   - "auth"                      # errors a different plan cannot fix;
+      #   - "permission"                # defaults cover auth/permission/
+      #   - "invalid api key"           # credential/config/corruption errors
+
   # Clarification configuration (always enabled for better UX)
   clarification:
     style: "conversational"          # Question style: conversational, formal, brief
@@ -382,6 +399,48 @@ memory:
     user_synopsis:
       enabled: true # Enable user synopsis (default: true)
       cache_ttl: 3600 # Time to live for user synopsis in seconds
+
+  # Memory ingestion (optional) -- everything defaults ON with the values
+  # below. Controls how raw ingested items become structured memory:
+  # tier escalation (T1 local classify -> T2 default-model extraction ->
+  # T3 frontier extraction for high-signal items), periodic entity
+  # resolution, and scheduled synthesis passes. Validation is fail-fast
+  # at load with the full config path in every error message.
+  # See SCHEMA_GUIDE.md "Memory Ingestion Configuration".
+  #
+  # ingestion:
+  #   max_in_flight_per_user: 4        # concurrent processing bound per user
+  #   sources:
+  #     gmail:
+  #       filter: strict               # strict | lenient | off (noise gate)
+  #       tier: 2                      # optional tier pin (1 | 2 | 3)
+  #   tiers:                           # escalation heuristics
+  #     enabled: true
+  #     ambiguity_margin: 0.05         # classify margin below -> escalate T2
+  #     t3_signal_score: 5             # signal score at/above -> T3
+  #     models:
+  #       t2: "openai/gpt-4o-mini"     # optional; default extraction model
+  #       t3: "anthropic/claude-..."   # optional; falls back to t2
+  #     budget:
+  #       t2_items_per_job: 100
+  #       t3_items_per_job: 10
+  #   entity_resolution:
+  #     enabled: true
+  #     auto_merge_threshold: 0.85     # score at/above -> auto-merge
+  #     flag_threshold: 0.5            # at/above (below merge) -> flag;
+  #                                    # must not exceed auto_merge_threshold
+  #     entity_types: [person]
+  #     max_entities: 200              # per-user scan bound per pass
+  #   synthesis:                       # cadences, each individually disableable
+  #     enabled: true
+  #     hot:       { enabled: true, interval_seconds: 300 }
+  #     warm:      { enabled: true, interval_seconds: 3600 }
+  #     cold:      { enabled: true, interval_seconds: 86400 }
+  #     cold_cold: { enabled: true, interval_seconds: 604800 }
+  #     patterns:
+  #       enabled: true
+  #       min_events: 20               # events needed for a schedule pattern
+  #       top_k: 3                     # items per rendered pattern fact
 
 
 # Artifacts configuration (optional)

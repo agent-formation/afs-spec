@@ -40,6 +40,27 @@ knowledge:
 - Parent traversal (`..`) is rejected
 - This ensures formations remain self-contained and portable
 
+## Remote sources
+
+Sources may declare a `url` instead of a `path`. Supported schemes: `http(s)://`, `s3://`, `gs://`, `az://`, `rsync://`, `rsync+ssh://`, `ftp://`, `sftp://`, `file://`.
+
+```yaml
+knowledge:
+  enabled: true
+  sources:
+    - url: "s3://my-bucket/docs/*.pdf"
+      description: "Product documentation"
+      auth:
+        type: aws
+        access_key: "${{ secrets.AWS_ACCESS_KEY }}"
+        secret_key: "${{ secrets.AWS_SECRET_KEY }}"
+      schedule: "@daily"    # optional re-sync (cron or alias); needs the scheduler
+```
+
+Remote content is **mirrored, then ingested**: each source syncs into a runtime-owned local cache (never into the formation directory, which may be read-only) and the ordinary local pipeline runs on the mirror. A failing sync never blocks formation startup or chat — per-file failures keep the previously synced copy.
+
+See [SCHEMA_GUIDE.md](../SCHEMA_GUIDE.md#knowledge-configuration-knowledge) for the full field reference: per-scheme auth types, `include`/`exclude` filters, size limits, archive extraction (`extract:`), and retry policy.
+
 ## Organization tips
 
 - Group related content in subdirectories (e.g., `knowledge/faq/`, `knowledge/docs/`)
@@ -49,4 +70,3 @@ knowledge:
 ## Notes
 
 - Knowledge is automatically cached and re-parsed only when sources change
-- Remote sources (S3, HTTP) are planned for a future release
