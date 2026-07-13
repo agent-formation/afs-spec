@@ -6,7 +6,29 @@ description: "External billing and payment processing service for order manageme
 url: "https://billing.external.com"  # REQUIRED: Service A2A endpoint
 
 # Authentication configuration
+# Types: none | api_key (key, optional header) | bearer (token) |
+#        basic (username/password) | custom (headers map) |
+#        hmac (secret, optional signature_header/timestamp_header) |
+#        oauth2 (client_id/client_secret/token_url, optional scope)
 auth:
   type: "api_key"                  # API key authentication
   header: "X-API-Key"              # Header name for API key
   key: "${{ secrets.EXTERNAL_BILLING_SERVICE_API_KEY }}"
+
+# hmac: every request is signed fresh -- the timestamp header carries unix
+# seconds and the signature header carries HMAC-SHA256(secret, timestamp) hex.
+# auth:
+#   type: "hmac"
+#   secret: "${{ secrets.EXTERNAL_BILLING_SERVICE_HMAC_SECRET }}"
+#   signature_header: "X-Signature"    # optional (default)
+#   timestamp_header: "X-Timestamp"    # optional (default)
+
+# oauth2: client_credentials grant against the service's token endpoint;
+# tokens are cached per service and refreshed before expiry, then sent as a
+# standard Bearer header. Outbound-only -- the inbound counterpart is openid.
+# auth:
+#   type: "oauth2"
+#   client_id: "${{ secrets.EXTERNAL_BILLING_SERVICE_CLIENT_ID }}"
+#   client_secret: "${{ secrets.EXTERNAL_BILLING_SERVICE_CLIENT_SECRET }}"
+#   token_url: "https://billing.external.com/oauth/token"
+#   scope: "billing.read billing.write"  # optional

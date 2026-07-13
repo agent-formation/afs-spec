@@ -779,9 +779,36 @@ a2a:
     port: 8181
     trusted_endpoints:                            # Trusted external endpoints
       - "muxi.partner.com"
+
+    # Inbound authentication (optional; type: "none" if omitted).
+    # Types: none | api_key (key, optional header) | bearer (token) |
+    #        basic (username/password) | custom (headers map) |
+    #        hmac (secret, optional timestamp_tolerance) |
+    #        openid (issuer, optional audience/jwks_url/allowed_algorithms/
+    #                clock_skew_seconds)
     auth:
       type: "bearer"                              # Authentication mode
       token: "${{ secrets.A2A_BEARER_TOKEN }}"    # Authentication key
+
+    # hmac: callers sign the request timestamp -- X-Signature is
+    # HMAC-SHA256(secret, X-Timestamp) hex; the server verifies with a
+    # constant-time comparison, rejects timestamps outside the tolerance
+    # window, and rejects replayed signatures within it.
+    # auth:
+    #   type: "hmac"
+    #   secret: "${{ secrets.A2A_HMAC_SECRET }}"
+    #   timestamp_tolerance: 300                  # seconds (positive int, default 300)
+
+    # openid: callers present a Bearer JWT; the server validates it against
+    # the issuer's JWKS (issuer/audience/algorithm/expiry checks). No shared
+    # key at rest. Inbound-only -- the outbound counterpart is oauth2.
+    # auth:
+    #   type: "openid"
+    #   issuer: "https://idp.example.com"         # required; http(s) URL
+    #   audience: "muxi-formation"                # optional; enforced when set
+    #   jwks_url: "https://idp.example.com/jwks"  # optional; default issuer + /.well-known/jwks.json
+    #   allowed_algorithms: ["RS256"]             # optional; default ["RS256"]
+    #   clock_skew_seconds: 30                    # optional; non-negative int, default 30
 
 
 # MCP service configuration
