@@ -51,8 +51,12 @@ This guide documents the complete schema structure for Agent Formation, includin
 - [Proactive Configuration](#proactive-configuration)
 - [Commands Configuration](#commands-configuration)
 - [Artifacts Configuration](#artifacts-configuration)
+- [Links Configuration (`links:`)](#links-configuration-links)
 - [Coding Delegation Configuration (`coding:`)](#coding-delegation-configuration-coding)
   - [The Adapter Schema](#the-adapter-schema)
+- [Watch Configuration (`mcp.watch`)](#watch-configuration-mcpwatch)
+  - [The `watch_job` Tool Contract](#the-watch_job-tool-contract)
+  - [Group Watch Quota Override](#group-watch-quota-override)
 - [A2A Configuration](#a2a-configuration)
   - [A2A General Configuration](#a2a-general-configuration)
   - [A2A Outbound Configuration](#a2a-outbound-configuration)
@@ -104,6 +108,8 @@ This guide documents the complete schema structure for Agent Formation, includin
 - [Trigger Validation](#trigger-validation)
 - [Transformer Validation](#transformer-validation)
 - [Coding Delegation Validation](#coding-delegation-validation)
+- [Watch Validation](#watch-validation)
+- [Links Validation](#links-validation)
 - [Group Validation](#group-validation)
 - [🎯 Best Practices](#-best-practices)
 - [Schema Compliance](#schema-compliance)
@@ -278,6 +284,13 @@ native_apps:
 # Shared-memory write grants.
 memory:
   write: ["group:analyst"]
+
+# Watch quota override (only watch.max_concurrent is supported here) --
+# mirrors the formation's mcp.watch shape. Highest value across a user's
+# groups wins; no group value = formation default.
+mcp:
+  watch:
+    max_concurrent: 25
 ```
 
 | Field | Required | Type | Default | Description |
@@ -291,6 +304,7 @@ memory:
 | `sops` | ❌ No | list/`"*"`/map | None | Allowed SOPs |
 | `native_apps` | ❌ No | list/`"*"`/map | None | Allowed native apps (no section = all non-privileged apps) |
 | `memory.write` | ❌ No | list | None | Shared-memory write scopes |
+| `mcp.watch.max_concurrent` | ❌ No | integer ≥ 1 | None | Per-user watch quota override (see [Watch Configuration](#watch-configuration-mcpwatch)); highest of a user's groups wins |
 
 #### Permission Resolution Rules
 
@@ -600,6 +614,30 @@ artifacts:
 
 ---
 
+### Links Configuration (`links:`)
+*Declared external destinations (credential portals, dashboards) for response affordances*
+
+An optional **top-level** mapping of `name -> {label, url, hint}`. Entries declare the external destinations that response producers may surface to clients as `action_link` widgets in the response envelope's `ui` array — with formation-config provenance. An `action_link` URL is never LLM-fabricated: it can only come from a declared link, a tool result, or a trigger payload (see `specs/formation.md` §9).
+
+```yaml
+links:
+  jira:
+    label: "Connect Jira"                          # optional display label
+    url: "https://auth.acme.com/connect/jira"      # required; http(s) only
+    hint: "Opens your company's credential portal" # optional one-liner
+  status:
+    url: "https://status.acme.com"
+```
+
+| Field | Required | Type | Default | Description |
+|-------|----------|------|---------|-------------|
+| `links.<name>` | ❌ No | map | None | One declared destination; must be a mapping with a `url` field |
+| `links.<name>.url` | ✅ Yes | string | None | Destination URL; **must** be `http://` or `https://` |
+| `links.<name>.label` | ❌ No | string | None | Display label for the link affordance |
+| `links.<name>.hint` | ❌ No | string | None | One-line hint shown alongside the link |
+
+---
+
 ### Coding Delegation Configuration (`coding:`)
 *Delegate coding tasks to an external headless coding CLI as tracked background jobs*
 
@@ -673,6 +711,70 @@ A captured-id adapter cannot use `output: text` and requires `parse.session_id`.
 **Always asynchronous.** The tool returns `{"job_id": ..., "status": "started"}` immediately; there is no synchronous mode and none may be offered. Completion re-enters the originating session as an internal request (`route_class: delegation`) through the full middleware + RBAC pipeline; a run that needs human input simply ends with the question as its final message, and the user's answer resumes the session via `continue_job_id`.
 
 See `schemas/coding/` for the annotated `claude-code` reference adapter and `specs/formation.md` §7 for the normative text.
+
+---
+
+### Watch Configuration (`mcp.watch`)
+*Remote async-job watching over MCP tools — cadence, deadline, and quotas*
+
+An optional sub-block of the formation's `mcp:` block. It configures the runtime-registered job-watching tool (`watch_job` in the reference implementation), which polls an MCP status tool at a fixed cadence until a deterministic terminal condition and re-enters the result into the originating conversation.
+
+**Default ON iff the formation declares `mcp.servers`** ("declared" = the raw server list; runtime built-ins do not count). No declared servers → no tool, and a `watch:` block is dead config that fails the load. There is no `enabled:` key — the tool grants no new capability (polls run under the original caller's own permission context) — the sole escape hatch is `mcp: { watch: false }`, which removes the tool entirely.
+
+```yaml
+mcp:
+  watch:                          # optional; all keys optional
+    interval: 30                  # THE poll cadence (seconds) — not agent-pickable
+    timeout: 7200                 # THE watch deadline (seconds)
+    max_concurrent: 10            # active watches per user
+    max_consecutive_failures: 3   # consecutive poll errors before the watch fails
+  servers:
+    - image-gen-mcp
+```
+
+| Field | Required | Type | Default | Description |
+|-------|----------|------|---------|-------------|
+| `mcp.watch` | ❌ No | map / `false` | defaults when servers are declared | `false` removes the tool; `true` or absent = defaults |
+| `mcp.watch.interval` | ❌ No | positive number | 30 | Poll cadence in seconds; first poll after one interval, fixed thereafter. Formation configuration — never a tool argument |
+| `mcp.watch.timeout` | ❌ No | positive number | 7200 | Watch deadline in seconds; on expiry the watch resolves as timed out and re-enters with that status |
+| `mcp.watch.max_concurrent` | ❌ No | integer ≥ 1 | 10 | Active watches **per user**. Governs watches only — bounds nothing else |
+| `mcp.watch.max_consecutive_failures` | ❌ No | integer ≥ 1 | 3 | Consecutive failed polls that fail the watch with the last error |
+
+The key set is closed (unknown keys fail load) and a boolean is rejected wherever a number is expected — all validated fail-fast at formation load, never a watch-time surprise.
+
+#### The `watch_job` Tool Contract
+
+```json
+watch_job({
+  "tool": "image-gen.check_status",     // any MCP tool visible to the caller
+  "args": {"id": "job_abc123"},         // arguments passed on every poll
+  "done_when": {"path": "$.status", "in": ["succeeded", "failed", "canceled"]},
+  "result": "$.output",                 // optional selector; default: full final body
+  "label": "logo render"                // optional; human-readable job label
+})
+→ {"job_id": "watch_9f2", "status": "watching", "status_url": "/jobs/watch_9f2"}
+```
+
+- **Always asynchronous.** Returns a watch handle immediately; the poll loop is background work and completion re-enters the conversation as an internal request through the full middleware + RBAC pipeline, fenced as untrusted content. Runtimes **must not** offer a blocking mode (same rule as coding delegation).
+- **`done_when` is deterministic — no LLM in the poll loop.** Closed key set `{path, equals, in}`: `path` is a non-empty dot-path selector into the poll body; exactly one of `equals` (single value) or `in` (non-empty list). Matching is exact equality with a string-form fallback (`equals: "3"` matches numeric `3`) and **strictly typed for booleans — a bool matches only a bool** (no `1 == true` coercion). A missing path means "not terminal yet", never an error. Enumerate **every** terminal state (not just success), or a failed job polls until the deadline.
+- Cadence and deadline come from `mcp.watch` — they are **not** tool parameters.
+- Watches are tracked jobs: listable and cancellable on the runtime's jobs surface; cancellation stops polling with no re-entry.
+- Recognition (job-shaped response → `watch_job` → acknowledgment) ships as a bundled dormant SOP fragment; a formation-local `sops/watch_job.md` shadows it (empty file = removed).
+
+#### Group Watch Quota Override
+
+Group files may raise (or lower) the per-user watch quota, mirroring the formation shape:
+
+```yaml
+# groups/power-users.yaml
+mcp:
+  watch:
+    max_concurrent: 25      # overrides the formation default for members
+```
+
+Closed key sets at both levels: in a group file `mcp:` supports only `watch`, and `watch:` supports only `max_concurrent` (integer ≥ 1). A user in multiple groups gets the **highest** of their groups' values (grants are additive — the same semantics as every other group list); no group value → formation default. The override governs watches only.
+
+See `specs/formation.md` §8 for the normative text.
 
 ---
 
@@ -1241,12 +1343,28 @@ All of these fail formation load — never a delegation-time surprise:
 - ✅ The adapter binary must be present (bare `command` on PATH; absolute `command` an executable file) — presence only; install/auth is the developer's business
 - ✅ When RBAC is active, every `coding.groups` entry must name an existing group in `groups/`
 
+### Watch Validation
+All of these fail formation load — never a watch-time surprise:
+- ✅ `mcp.watch` must be a mapping, `true`, or `false`
+- ✅ Keys limited to `interval`, `timeout`, `max_concurrent`, `max_consecutive_failures` (closed set)
+- ✅ `interval` and `timeout` must be positive numbers (seconds); `max_concurrent` and `max_consecutive_failures` must be integers ≥ 1
+- ✅ A boolean is rejected wherever a number is expected
+- ✅ A `watch:` block in a formation with no declared `mcp.servers` is dead config and fails load
+- ✅ In group files: `mcp` supports only the `watch` key, and `watch` supports only `max_concurrent` (integer ≥ 1)
+
+### Links Validation
+- ✅ `links` must be a mapping of `name -> {label, url, hint}`
+- ✅ Every entry must be a mapping with a `url` field
+- ✅ `url` must be an `http://` or `https://` URL
+- ✅ `label` and `hint` (if present) must be strings
+
 ### Group Validation
-- ✅ Top-level keys limited to `name`, `description`, `inherits`, `agents`, `mcp_servers`, `triggers`, `sops`, `native_apps`, `memory`
+- ✅ Top-level keys limited to `name`, `description`, `inherits`, `agents`, `mcp_servers`, `triggers`, `sops`, `native_apps`, `memory`, `mcp`
 - ✅ `inherits` references must exist; inheritance cycles fail load
 - ✅ Section values must be a list, the wildcard string `"*"`, or a `{allow, deny}` mapping
 - ✅ `mcp_servers.<id>` supports only the `tools` sub-key; `tools` blocks use `allow`/`deny` (both permitted)
 - ✅ `memory` supports only the `write` sub-key
+- ✅ `mcp` supports only `watch.max_concurrent` (the watch quota override — see [Watch Validation](#watch-validation))
 - ✅ A group file grants nothing by itself — it takes effect only when the request middleware attaches its id to a request (or `rbac.fallback` names it)
 
 ## 🎯 Best Practices

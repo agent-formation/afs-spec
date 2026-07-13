@@ -17,6 +17,8 @@ A **Formation** is a declarative description of an AI agent system. It specifies
 - Outbound payload transformers and proactive messaging channels
 - Access control groups
 - Coding-agent delegation to external headless CLIs
+- Remote async-job watching over MCP tools
+- Declared external links and typed response affordances
 - Optional runtime-specific extensions
 
 A Formation is **portable by default** and should not assume a specific runtime.
@@ -72,6 +74,8 @@ Each server supports an optional `parameters` field: a flat key-value map of def
 Each server also supports an optional `tools` block (`allow` and/or `deny`; `whitelist`/`blacklist` are accepted aliases) that scopes the upstream tool catalog at registration time. `allow` alone keeps only matching tools; `deny` alone keeps everything except matching tools; both together apply allow first and then subtract deny (deny wins on overlap). Patterns are POSIX `fnmatch` globs (`*`, `?`, `[...]`); names without metacharacters match literally. This narrows the per-turn planning prompt to the tools the formation actually uses and lets operators keep destructive verbs out of the LLM's plannable surface entirely.
 
 **Registry is not grant.** The formation-level `mcp.servers` list defines connections and prunes tool catalogs; capability flows to an agent only via that agent's `mcp_servers` attachment. Declaring a server at the formation level does not by itself put its tools on any agent's surface.
+
+Formations that declare MCP servers also get remote async-job watching by default — see §8 (`mcp.watch`).
 
 ### 2.4 A2A services
 A2A services define agent-to-agent and external service communication.
@@ -369,7 +373,7 @@ memory:
   write: ["group:analyst"]             # shared-memory write grants
 ```
 
-Sections: `agents`, `mcp_servers`, `triggers`, `sops`, `native_apps`, `memory.write`. Patterns are `fnmatch` globs. Resolution rules:
+Sections: `agents`, `mcp_servers`, `triggers`, `sops`, `native_apps`, `memory.write`. A group file may additionally carry an `mcp:` block overriding the formation's watch quota — the only supported key is `mcp.watch.max_concurrent` (§8.3). Patterns are `fnmatch` globs. Resolution rules:
 
 1. **Union of allows** across a user's groups; **any group's deny wins** (deny is global, allow is per-group).
 2. **Inheritance** resolves parents first (depth-first, cycle-checked); list sections merge additively; a child's tool-override block **replaces** the parent's block for the same (agent, server) key.
@@ -576,7 +580,193 @@ See `schemas/coding/` for the adapter template format and the annotated `claude-
 
 ---
 
-## 8. Artifacts
+## 8. Remote job watching (`mcp.watch`)
+
+Some MCP-reachable work outlives a turn: image or video generation, long renders, batch jobs. A well-designed MCP server answers inline when fast and returns a job handle (`{job_id, status: "processing"}`) when slow — **async-ness is a property of the response, not the tool**, so the standard never marks MCP tools async (no `async:` flag, no callback injection). What it standardizes instead is one runtime-registered polling tool — `watch_job` in the reference implementation — that polls a status tool at a formation-configured cadence until a deterministic terminal condition, then re-enters the result into the originating conversation.
+
+**Default ON when MCP servers are declared; inert otherwise.** The tool registers whenever the formation declares `mcp.servers` ("declared" means the raw server list — runtime built-ins do not count). It grants no new capability: every poll executes the named tool under the **original caller's** resolved permission context (§5) — a user who cannot call the status tool cannot watch it. There is deliberately no `enabled:` key; the sole escape hatch is `mcp: { watch: false }`, which removes the tool entirely (tool-catalog hygiene, or a strict no-background-work compliance posture).
+
+### 8.1 The `watch:` sub-block
+
+Cadence and deadline are **formation configuration, not agent arguments**: polls are zero-token deterministic tool calls, so a uniform formation-set interval is cheap even when suboptimal for a given job, and numeric knobs are exactly what LLMs pick badly. Runtimes **must not** expose cadence or deadline as tool parameters.
+
+```yaml
+mcp:
+  watch:                          # optional; all keys optional
+    interval: 30                  # THE poll cadence (seconds)
+    timeout: 7200                 # THE watch deadline (seconds)
+    max_concurrent: 10            # active watches per user
+    max_consecutive_failures: 3   # consecutive poll errors before the watch fails
+  servers:
+    - image-gen-mcp
+```
+
+| Key | Type | Default | Meaning |
+|-----|------|---------|---------|
+| `interval` | positive number (seconds) | 30 | Fixed poll cadence; first poll after one interval |
+| `timeout` | positive number (seconds) | 7200 | Watch deadline; on expiry the watch resolves as timed out and re-enters with that status (nothing silently vanishes) |
+| `max_concurrent` | integer ≥ 1 | 10 | Active watches **per user**. This quota governs watches only — it bounds nothing else |
+| `max_consecutive_failures` | integer ≥ 1 | 3 | Consecutive failed polls that fail the watch with the last error |
+
+Validation is fail-fast at formation load, never a watch-time surprise:
+
+- The key set is closed — unknown keys under `watch:` **must** fail load.
+- `interval`/`timeout` **must** be positive numbers; `max_concurrent`/`max_consecutive_failures` **must** be integers ≥ 1. A boolean **must** be rejected wherever a number is expected.
+- `watch: false` disables the feature; `watch: true` or an absent `watch:` key (with servers declared) yields the defaults.
+- A `watch:` block in a formation that declares no `mcp.servers` is dead config and **must** fail load.
+
+### 8.2 The `watch_job` tool contract
+
+```json
+watch_job({
+  "tool": "image-gen.check_status",     // any MCP tool visible to the caller
+  "args": {"id": "job_abc123"},         // arguments passed on every poll
+  "done_when": {"path": "$.status", "in": ["succeeded", "failed", "canceled"]},
+  "result": "$.output",                 // optional selector; default: full final body
+  "label": "logo render"                // optional; human-readable job label
+})
+→ {"job_id": "watch_9f2", "status": "watching", "status_url": "/jobs/watch_9f2"}
+```
+
+`tool` and `done_when` are required; `args`, `result`, and `label` are optional.
+
+**Always asynchronous.** The tool **must** return a job handle immediately and end there; the poll loop runs in the background and completion re-enters the conversation as an internal request through the full middleware + RBAC pipeline (§5.1), with the poll body treated as untrusted external content. Runtimes **must not** offer a blocking mode or a sync escape hatch — the same rule as coding delegation (§7.6). Watches are tracked jobs: listable and cancellable on the runtime's jobs surface; cancellation stops polling with no re-entry.
+
+**`done_when` is deterministic — no LLM in the poll loop.** It is an object with a closed key set (`path`, `equals`, `in`; unknown keys **must** be rejected):
+
+- `path` (required): a non-empty dot-path selector into the poll response body (e.g. `$.status`).
+- Exactly **one** of `equals` (a single terminal value) or `in` (a non-empty list of terminal values) — both or neither **must** be rejected.
+- The condition is met when the value at `path` matches the expected value(s). Matching is exact equality with a string-form fallback (`equals: "3"` matches a numeric `3`), and **strictly typed for booleans: a boolean matches only a boolean** — numeric coercion (`1 == true`) **must not** count as a match, or determinism breaks.
+- A missing `path` in the poll body is simply "not terminal yet" — never an error.
+
+`done_when` should enumerate **every** terminal state the service can report (not just success); otherwise a failed job polls until the deadline.
+
+Runtimes **should** teach the recognition behavior (job-shaped response → `watch_job` → conversational acknowledgment) via a bundled dormant SOP fragment appended to agent instructions whenever the tool registers. A formation-local `sops/watch_job.md` **shadows** the bundled fragment (an empty file removes it) — the same shadowing rule as built-in skills and channel transformers.
+
+### 8.3 Group quota override
+
+Group files (§5.2) may override the watch concurrency quota, mirroring the formation shape so the override looks like the thing it overrides:
+
+```yaml
+# groups/power-users.yaml
+mcp:
+  watch:
+    max_concurrent: 25      # overrides the formation default for members
+```
+
+- Both key sets are closed: in a group file, `mcp:` supports only `watch`, and `watch:` supports only `max_concurrent` (an integer ≥ 1). Anything else **must** fail load.
+- A user in multiple groups gets the **highest** of their groups' values — grants are additive, the same semantics as every other group list (§5.2). No group value → formation default. Inheritance keeps the highest value along the chain.
+- The override governs **watches only**; it grants no tools and bounds nothing else.
+
+---
+
+## 9. Declared links and response affordances (`links:` + `ui`)
+
+Two principles anchor this section: the runtime is a **gateway, not an app** — it never renders anything, ships no components, no HTML, no JS; and rich UI is **text-first, progressively enhanced** — clients that understand an affordance render it natively, everyone else loses nothing.
+
+### 9.1 `links:` — declared external destinations
+
+Optional **top-level** section declaring named external destinations (credential portals, OAuth consent pages, dashboards) that response producers may surface as `action_link` widgets (§9.3) with formation-config provenance:
+
+```yaml
+links:
+  jira:
+    label: "Connect Jira"                          # optional display label
+    url: "https://auth.acme.com/connect/jira"      # required; http(s) only
+    hint: "Opens your company's credential portal" # optional one-liner
+```
+
+A mapping of `name -> {label, url, hint}`. Rules (validated at formation load):
+
+- `url` is required and **must** be an `http://` or `https://` URL.
+- `label` and `hint` are optional strings.
+- An entry that is not a mapping with a `url` field **must** fail load.
+
+### 9.2 The `ui` envelope array
+
+The response envelope gains an optional, typed `ui` array of *affordances*:
+
+```jsonc
+{
+  "text": "Which repository did you mean? I found three.",   // always complete alone
+  "ui": [
+    {
+      "type": "options",
+      "id": "ui_7f3a",                       // runtime-assigned, for the reply path
+      "prompt": "Which repo?",
+      "options": [
+        {"value": "muxi-ai/runtime", "label": "runtime"},
+        {"value": "muxi-ai/cli",     "label": "cli"}
+      ],
+      "multi": false
+    },
+    {
+      "type": "action_link",
+      "id": "ui_9c21",
+      "label": "Connect Jira",
+      "url": "https://auth.acme.com/connect/jira",
+      "hint": "Opens your company's credential portal"
+    }
+  ]
+}
+```
+
+Rules:
+
+- **`ui` is additive and optional.** When a response carries no widgets the key **must** be absent entirely (not `null`, not `[]`) — the envelope **must** be byte-identical to a pre-feature response.
+- **`text` carries the fallback duty.** Producers **must** phrase the response text so the interaction works without any widget (e.g. options are also listed in prose). A user on a plain-text channel loses nothing essential.
+- **Unknown widget types must be ignored.** Clients render the types they know and **must** skip the rest; new widget types are therefore never protocol breaks. The type registry is versioned in this spec, not negotiated at runtime.
+- **Widgets are producer-built, never LLM-emitted.** Widgets enter the envelope only through runtime producers; free-form LLM output **must not** become a widget.
+- **Size clamps.** Runtimes **must** clamp per-widget and per-envelope sizes; an oversized widget **must** be dropped whole, never truncated (a partial widget is worse than none — the text fallback is always complete on its own). Reference defaults: 4096 bytes per widget, 8 widgets and 16384 combined bytes per envelope, 25 options per `options` widget.
+
+### 9.3 Widget type registry (v1)
+
+| Type | Purpose | Status |
+|------|---------|--------|
+| `options` | Clarification with choices — pick, don't type | v1 |
+| `action_link` | Send the user somewhere external — credential portal, OAuth consent, dashboard | v1 |
+| `mcp_resource` | Gateway passthrough of an MCP App / UI resource returned by an external MCP server — relayed verbatim, rendered by capable clients only | reserved for a future version |
+
+**`options`** fields: `type`, `id` (runtime-assigned; the reply-path key), `prompt` (short question), `options` (list of `{value, label}`; an entry without a `value` is dropped, a missing `label` falls back to the value), `multi` (boolean; always `false` in v1).
+
+**`action_link`** fields: `type`, `id`, `label`, `url`, `hint` (optional). The `url` **must** be `http(s)` — anything else **must** yield no widget.
+
+**`mcp_resource`** is untrusted external content: the runtime relays it and **must not** execute or interpret it.
+
+### 9.4 `action_link` provenance
+
+An `action_link` URL **must not** be LLM-fabricated. Every URL enters a widget through a producer that records its source, and the only admissible sources are:
+
+1. formation config — a declared `links:` entry (§9.1),
+2. a tool result,
+3. a trigger payload.
+
+The LLM may *select* among provenanced URLs; it can never mint one into a widget. (Prose URLs in `text` remain what they are today — it is the elevated, clickable affordance that demands provenance.)
+
+### 9.5 The reply path (`ui_response`)
+
+The runtime stays **stateless** — no widget state is stored server-side; a widget `id` is meaningful only within the conversation's own history. The client replies with a normal next message plus an optional structured hint:
+
+```jsonc
+{
+  "message": "runtime",                                        // always present, always sufficient
+  "ui_response": {"id": "ui_7f3a", "value": "muxi-ai/runtime"} // optional hint
+}
+```
+
+- `message` alone is always sufficient — a client may render options as plain text and let the user type; the LLM disambiguates as usual.
+- `ui_response` is a **hint** that makes the choice machine-certain. For a clarification-produced `options` widget, a hint whose `id` matches the asking widget and whose `value` is one of the offered options **must** pin the selection deterministically — no re-interpretation.
+- An unknown or stale `id`, or a value not among the offered options, **must** be ignored — the message stands alone. Ignoring is silent (never an error): the hint is advisory by construction.
+
+### 9.6 Transport
+
+- **REST:** `ui` appears on the final response object (subject to the absent-when-empty rule, §9.2).
+- **SSE:** a dedicated `ui` event (`event: ui`, data `{"ui": [...]}`) emitted at end of turn — after the text stream, before the terminal done event. Clients render affordances after text completes.
+- **Channels (Slack/Telegram/email transformers):** a transformer that does not render widgets natively simply ignores `ui` — the text fallback *is* the channel experience.
+
+---
+
+## 10. Artifacts
 
 Optional `artifacts:` block controlling artifact capture and retention. Artifact capture is **on by default** (omit the block and you still get local artifact storage):
 
@@ -595,7 +785,7 @@ artifacts:
 
 ---
 
-## 9. Secrets and environment variables
+## 11. Secrets and environment variables
 
 - Secrets are referenced as: `${{ secrets.NAME }}`
 - Environment variables as: `${{ env.VAR }}`
@@ -604,7 +794,7 @@ Concrete storage and resolution are runtime-defined, but the syntax is standard.
 
 ---
 
-## 10. Init hook
+## 12. Init hook
 
 A Formation may include an `init` field containing a shell command that the runtime executes **before** any services are initialized. This is intended for one-time environment setup: creating directories, installing packages, seeding data, setting permissions, etc.
 
@@ -621,7 +811,7 @@ Rules:
 
 ---
 
-## 11. Extensions
+## 13. Extensions
 
 Agent Formation includes a standard `extensions` surface:
 
@@ -638,7 +828,7 @@ Rules:
 
 ---
 
-## 12. Backward compatibility
+## 14. Backward compatibility
 
 - Patch/minor releases are backward compatible.
 - Major releases may break compatibility and must include migration notes.

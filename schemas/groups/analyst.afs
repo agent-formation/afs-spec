@@ -60,3 +60,12 @@ native_apps:
 # Shared-memory write grants (scopes are data-plane identifiers).
 memory:
   write: ["group:analyst"]
+
+# Watch quota override (optional) -- mirrors the formation's mcp.watch shape
+# so the override looks like the thing it overrides. Closed key sets: only
+# watch.max_concurrent is supported in group files. A user in multiple groups
+# gets the HIGHEST of their groups' values (grants are additive); no group
+# value = formation default. Governs watches only.
+# mcp:
+#   watch:
+#     max_concurrent: 25
