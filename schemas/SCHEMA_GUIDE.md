@@ -42,10 +42,13 @@ This guide documents the complete schema structure for Agent Formation, includin
   - [Overlord Behavior Configuration](#overlord-behavior-configuration)
   - [Overlord Clarification Configuration](#overlord-clarification-configuration)
 - [Async Configuration](#async-configuration)
+- [Workflow Replanning Configuration (`overlord.workflow.replanning`)](#workflow-replanning-configuration-overlordworkflowreplanning)
 - [Memory Configuration](#memory-configuration)
   - [Working Memory Configuration](#working-memory-configuration)
   - [Buffer Memory Configuration](#buffer-memory-configuration)
   - [Persistent Memory Configuration](#persistent-memory-configuration)
+  - [Memory Ingestion Configuration (`memory.ingestion`)](#memory-ingestion-configuration-memoryingestion)
+- [Knowledge Configuration (`knowledge:`)](#knowledge-configuration-knowledge)
 - [Logging Configuration](#logging-configuration)
 - [Scheduler Configuration](#scheduler-configuration)
 - [Proactive Configuration](#proactive-configuration)
@@ -110,6 +113,9 @@ This guide documents the complete schema structure for Agent Formation, includin
 - [Coding Delegation Validation](#coding-delegation-validation)
 - [Watch Validation](#watch-validation)
 - [Links Validation](#links-validation)
+- [Memory Ingestion Validation](#memory-ingestion-validation)
+- [Replanning Validation](#replanning-validation)
+- [Knowledge Source Validation](#knowledge-source-validation)
 - [Group Validation](#group-validation)
 - [🎯 Best Practices](#-best-practices)
 - [Schema Compliance](#schema-compliance)
@@ -414,6 +420,36 @@ Rules:
 
 ---
 
+### Workflow Replanning Configuration (`overlord.workflow.replanning`)
+*A fundamentally different plan when task-level recovery is exhausted — OFF by default*
+
+When a workflow fails after task-level recovery (retries, fallbacks) is exhausted, replanning asks the task decomposer for a fundamentally different plan that avoids the observed failure modes. Disabled by default so existing formations keep byte-identical behavior.
+
+```yaml
+overlord:
+  workflow:
+    replanning:
+      enabled: true
+      max_attempts: 3
+      plan_similarity_threshold: 0.7
+      preserve_successful_outputs: true
+      replan_timeout_seconds: 30
+      non_replannable_error_patterns: ["auth", "permission", "invalid api key"]
+```
+
+| Field | Required | Type | Default | Description |
+|-------|----------|------|---------|-------------|
+| `replanning.enabled` | ❌ No | boolean | false | Enable workflow-level replanning |
+| `replanning.max_attempts` | ❌ No | integer 1-10 | 3 | Maximum replanning attempts per original workflow |
+| `replanning.plan_similarity_threshold` | ❌ No | number 0-1 | 0.7 | Replanned workflows with task-signature similarity at or above this are rejected as duplicates of the failed plan |
+| `replanning.preserve_successful_outputs` | ❌ No | boolean | true | Include successful task results in the replan context so completed work is not redone |
+| `replanning.replan_timeout_seconds` | ❌ No | number ≥ 1 | 30 | Timeout for generating a replacement plan |
+| `replanning.non_replannable_error_patterns` | ❌ No | list of strings | auth/permission/credential/config/corruption set | Case-insensitive substrings identifying task errors a different plan cannot fix; entries must be non-empty (a blank substring matches everything) |
+
+Unknown keys in the block fail the load. Replanned workflows re-enter the decomposer through the normal pipeline, so permission and access rules apply unchanged.
+
+---
+
 ### Memory Configuration
 *Memory systems for context retention and long-term storage*
 
@@ -515,6 +551,144 @@ memory:
 
 > [!TIP]
 > **Development Workflow**: Use `enabled: false` to temporarily disable persistent memory while preserving your PostgreSQL configuration. This is useful for debugging or testing without persistence.
+
+#### Memory Ingestion Configuration (`memory.ingestion`)
+*Tiered extraction, entity resolution, and synthesis cadences for ingested memory*
+
+Controls how raw ingested items (e.g. connected sources like email) become structured memory: a tier-escalation pipeline (T1 local classify/store → T2 default-model LLM extraction → T3 frontier extraction for high-signal items), periodic entity resolution, and scheduled synthesis passes. Everything defaults ON with the values below; the block is optional.
+
+```yaml
+memory:
+  ingestion:
+    max_in_flight_per_user: 4        # concurrent processing bound (lenient fallback)
+    sources:
+      gmail:
+        filter: strict               # strict | lenient | off (per-source noise gate)
+        tier: 2                      # optional per-source tier pin (1 | 2 | 3)
+    tiers:                           # escalation heuristics (T1 -> T2 -> T3)
+      enabled: true
+      ambiguity_margin: 0.05         # classify margin below this -> escalate to T2
+      t3_signal_score: 5             # signal score at/above -> T3
+      models:
+        t2: "openai/gpt-4o-mini"     # optional; default extraction model
+        t3: "anthropic/claude-..."   # optional; falls back to the t2 model
+      budget:
+        t2_items_per_job: 100        # LLM-extraction cap per processing job
+        t3_items_per_job: 10         # frontier cap per processing job
+    entity_resolution:
+      enabled: true
+      auto_merge_threshold: 0.85     # score at/above -> auto-merge
+      flag_threshold: 0.5            # score at/above (below merge) -> flag for review
+      entity_types: [person]
+      max_entities: 200              # per-user scan bound per pass
+    synthesis:                       # cadence table; each individually disableable
+      enabled: true
+      hot:       { enabled: true, interval_seconds: 300 }
+      warm:      { enabled: true, interval_seconds: 3600 }
+      cold:      { enabled: true, interval_seconds: 86400 }
+      cold_cold: { enabled: true, interval_seconds: 604800 }
+      patterns:
+        enabled: true
+        min_events: 20               # a schedule pattern needs this many events
+        top_k: 3                     # items per rendered pattern fact
+```
+
+| Field | Required | Type | Default | Description |
+|-------|----------|------|---------|-------------|
+| `ingestion.max_in_flight_per_user` | ❌ No | integer | 4 | Concurrent processing bound per user (lenient fallback on bad values) |
+| `ingestion.sources.<name>.filter` | ❌ No | string | — | Per-source noise gate: `strict` \| `lenient` \| `off` (lenient fallback) |
+| `ingestion.sources.<name>.tier` | ❌ No | 1 \| 2 \| 3 | — | Pin a source to one processing tier (strict; anything else fails load) |
+| `ingestion.tiers.enabled` | ❌ No | boolean | true | Enable tier escalation heuristics |
+| `ingestion.tiers.ambiguity_margin` | ❌ No | number 0-1 | 0.05 | Classification margin below this escalates the item to T2 |
+| `ingestion.tiers.t3_signal_score` | ❌ No | positive integer | 5 | Signal score at/above this escalates to T3 |
+| `ingestion.tiers.models.t2` / `.t3` | ❌ No | model string | text model / t2 model | Optional extraction model overrides; `t3` falls back to `t2` |
+| `ingestion.tiers.budget.t2_items_per_job` | ❌ No | positive integer | 100 | LLM-extraction cap per processing job |
+| `ingestion.tiers.budget.t3_items_per_job` | ❌ No | positive integer | 10 | Frontier-extraction cap per processing job |
+| `ingestion.entity_resolution.enabled` | ❌ No | boolean | true | Enable periodic entity resolution |
+| `ingestion.entity_resolution.auto_merge_threshold` | ❌ No | number 0-1 | 0.85 | Match score at/above auto-merges entities |
+| `ingestion.entity_resolution.flag_threshold` | ❌ No | number 0-1 | 0.5 | Score at/above (below merge) flags for review; must not exceed `auto_merge_threshold` |
+| `ingestion.entity_resolution.entity_types` | ❌ No | non-empty list | `[person]` | Entity types to resolve (normalized lowercase) |
+| `ingestion.entity_resolution.max_entities` | ❌ No | positive integer | 200 | Per-user scan bound per pass |
+| `ingestion.synthesis.enabled` | ❌ No | boolean | true | Master switch for synthesis cadences |
+| `ingestion.synthesis.<cadence>.enabled` | ❌ No | boolean | true | Per-cadence switch (`hot`/`warm`/`cold`/`cold_cold`) |
+| `ingestion.synthesis.<cadence>.interval_seconds` | ❌ No | positive number | 300 / 3600 / 86400 / 604800 | Cadence intervals: 5m / hourly / nightly / weekly |
+| `ingestion.synthesis.patterns.enabled` | ❌ No | boolean | true | Enable schedule-pattern synthesis |
+| `ingestion.synthesis.patterns.min_events` | ❌ No | positive integer | 20 | Minimum events before a pattern is synthesized |
+| `ingestion.synthesis.patterns.top_k` | ❌ No | positive integer | 3 | Items per rendered pattern fact |
+
+Validation is fail-fast at load with the full config path in every error; booleans are rejected wherever numbers are expected. (The two pre-existing keys, `max_in_flight_per_user` and `sources.<name>.filter`, keep their shipped lenient-fallback semantics.)
+
+---
+
+### Knowledge Configuration (`knowledge:`)
+*Local and remote knowledge sources, plus reasoning-RAG retrieval settings*
+
+Knowledge sources give agents reference material for context-aware responses. A source is either **local** (a `path` relative to the formation directory) or **remote** (a `url` synced into a local mirror before ingestion). Declared at the agent level (and, where the runtime supports it, formation-wide) as a `sources` list:
+
+```yaml
+knowledge:
+  enabled: true
+  sources:
+    - path: "knowledge/faq/"
+      description: "Frequently asked questions"
+    - url: "s3://my-bucket/docs/*.pdf"
+      description: "Product documentation"
+      id: product-docs                 # optional; derived from the URL when absent
+      auth:
+        type: aws                      # omit keys to use the ambient credential chain
+        access_key: "${{ secrets.AWS_ACCESS_KEY }}"
+        secret_key: "${{ secrets.AWS_SECRET_KEY }}"
+      include: ["*.pdf"]
+      exclude: ["drafts/*"]
+      schedule: "@daily"               # cron expression or alias; needs the scheduler
+```
+
+**Local sources**: `path` must be relative to the formation root; absolute paths and `..` traversal are rejected (formations stay self-contained and portable).
+
+**Remote sources** (`url`): supported schemes are `http://`, `https://`, `s3://`, `gs://`, `az://`, `rsync://`, `rsync+ssh://`, `ftp://`, `sftp://`, and `file://` (bind mounts; absolute local paths only). Remote content is **mirrored, then ingested**: each source syncs into a runtime-owned local cache (never into the formation directory, which may be read-only) and the ordinary local ingestion pipeline runs on the mirror. A failing sync never blocks formation startup or chat — per-file failures keep the previously synced copy, and a total failure degrades to whatever the last successful sync recorded.
+
+| Field | Required | Type | Default | Description |
+|-------|----------|------|---------|-------------|
+| `url` | ✅ Yes* | string | — | Source URL (*exactly one of `path`/`url` per source) |
+| `description` | ✅ Yes | string | — | Human-readable source description |
+| `id` | ❌ No | string | derived slug-hash | Stable source identifier; must be unique within the list |
+| `auth` | ❌ No | map | — | Scheme-appropriate auth block (see below); required for `az://` |
+| `headers` | ❌ No | string map | — | Extra request headers; `http(s)://` only |
+| `include` / `exclude` | ❌ No | list of patterns | — | fnmatch filters applied to synced file paths |
+| `max_files` | ❌ No | positive integer | 100 | Per-source file count bound |
+| `max_file_size` | ❌ No | positive integer | 10485760 | Per-file size bound (bytes, 10MB) |
+| `max_total_size` | ❌ No | positive integer | 104857600 | Per-source total size bound (bytes, 100MB) |
+| `timeout` | ❌ No | positive integer | 300 | Sync timeout (seconds) |
+| `accept_new_host_keys` | ❌ No | boolean | false | `rsync+ssh`/`sftp` only: opt into SSH trust-on-first-use (default requires the host in `known_hosts`) |
+| `extract` | ❌ No | boolean | false | Treat the URL as a single downloadable archive; extracted contents become the source's files. Not valid for `rsync` schemes or glob URLs |
+| `extract_pattern` | ❌ No | glob string | — | Filter for extracted entries; requires `extract: true` |
+| `max_extracted_files` / `max_extracted_size` | ❌ No | positive integer | runtime default | Decompression-bomb bounds; require `extract: true` |
+| `schedule` | ❌ No | string | — | Periodic re-sync: a cron expression or `@startup` \| `@hourly` \| `@daily` \| `@weekly`. Requires the scheduler service; without it, sources sync at startup only (loud warning) |
+| `retry` | ❌ No | map | — | Re-sync retry policy: `max_attempts` (integer ≥ 1), `initial_delay` / `max_delay` (positive seconds), `exponential_base` (number ≥ 1); unknown keys fail load |
+
+**Auth types by scheme** (credentials belong in `${{ secrets.* }}` references):
+
+| Scheme | Auth types | Required fields |
+|--------|-----------|-----------------|
+| `http` / `https` | `basic`, `bearer` | `username`+`password` / `token` |
+| `s3` | `aws` | `access_key`+`secret_key` together, or neither (ambient credential chain) |
+| `gs` | `gcp` | optional `credentials_json` (else Application Default Credentials) |
+| `az` | `azure` (required) | `connection_string`, or `account_name`+`account_key` |
+| `rsync+ssh` | `ssh_key` | `key` |
+| `ftp` | `basic` | `username`+`password` |
+| `sftp` | `ssh_key`, `basic` | `key` / `username`+`password` |
+| `rsync`, `file` | none | — |
+
+Scheme-specific structural rules (all load-time errors): `http(s)` and `rsync` URLs reject glob patterns (`http` has no directory listing; `rsync` uses `include`/`exclude` instead); `s3`/`gs`/`az` need a bucket or container in the URL; `file://` requires an absolute local path.
+
+**Reasoning-RAG settings** (agent-level, optional): large sources can be indexed as navigable trees instead of flat vectors.
+
+| Field | Required | Type | Default | Description |
+|-------|----------|------|---------|-------------|
+| `knowledge.reasoning_threshold` | ❌ No | integer ≥ 0 | runtime default | Token size at/above which a source gets reasoning-based indexing; 0 disables it |
+| `knowledge.tree` | ❌ No | map | — | Tree-build tuning; closed key set: `model`, `terminator_model`, `max_depth`, `max_pages_per_node`, `max_tokens_per_node`, `max_document_tokens`, `max_sufficiency_rounds`, `max_fetched_nodes_pct` (model references participate in the model-selection hierarchy) |
+| `sources[*].retrieval` | ❌ No | string | `vector` | Per-source retrieval mode: `vector` \| `tree` \| `tree-vector` \| `hybrid` |
+| `sources[*].agent_tree` | ❌ No | map | — | Persistent per-agent tree; only key: `regenerate` (`manual` \| `on-source-change` \| `on-formation-load`). Requires a tree-capable `retrieval` mode |
 
 ---
 
@@ -1357,6 +1531,33 @@ All of these fail formation load — never a watch-time surprise:
 - ✅ Every entry must be a mapping with a `url` field
 - ✅ `url` must be an `http://` or `https://` URL
 - ✅ `label` and `hint` (if present) must be strings
+
+### Memory Ingestion Validation
+All of these fail formation load with the full config path in the message:
+- ✅ `memory.ingestion` and each sub-block must be mappings
+- ✅ Booleans are rejected wherever numbers are expected; thresholds and margins must be in 0-1; counts and intervals must be positive
+- ✅ `entity_resolution.flag_threshold` must not exceed `auto_merge_threshold`
+- ✅ `sources.<name>.tier` must be exactly 1, 2, or 3
+- ✅ `entity_types` must be a non-empty list of non-empty strings
+
+### Replanning Validation
+- ✅ `overlord.workflow.replanning` rejects unknown keys
+- ✅ `max_attempts` must be an integer 1-10; `plan_similarity_threshold` in 0-1; `replan_timeout_seconds` ≥ 1
+- ✅ `non_replannable_error_patterns` entries must be non-empty strings
+
+### Knowledge Source Validation
+All of these fail formation load — never a sync-time surprise:
+- ✅ Every source needs exactly one of `path` (local) or `url` (remote), plus a non-empty `description`
+- ✅ Local `path` must be relative to the formation root; absolute paths and `..` traversal are rejected
+- ✅ Remote scheme must be one of: `http`, `https`, `s3`, `gs`, `az`, `rsync`, `rsync+ssh`, `ftp`, `sftp`, `file`
+- ✅ Scheme structure: host/bucket/container required where applicable; `file://` must be an absolute local path; glob patterns rejected for `http(s)` and `rsync` schemes
+- ✅ `auth.type` must be valid for the scheme (see the auth table) with its required fields non-empty; `az://` sources require an `auth` block
+- ✅ `extract` options require `extract: true`; `extract` is invalid for `rsync` schemes and glob URLs
+- ✅ `schedule` must be a valid cron expression or one of `@startup`/`@hourly`/`@daily`/`@weekly`
+- ✅ `retry` keys are a closed set (`max_attempts`, `initial_delay`, `max_delay`, `exponential_base`) with typed bounds
+- ✅ Source `id`s must be unique within the list
+- ✅ `retrieval` must be one of `vector`/`tree`/`tree-vector`/`hybrid`; `agent_tree` requires a tree-capable mode and supports only `regenerate` (`manual`/`on-source-change`/`on-formation-load`)
+- ✅ `knowledge.tree` keys are a closed set; `reasoning_threshold` must be a non-negative integer
 
 ### Group Validation
 - ✅ Top-level keys limited to `name`, `description`, `inherits`, `agents`, `mcp_servers`, `triggers`, `sops`, `native_apps`, `memory`, `mcp`

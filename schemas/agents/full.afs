@@ -46,13 +46,16 @@ specialties:
 # Domain knowledge (optional)
 # Enhance agent with context knowledge, allowing it to access and utilize information
 # from external sources when responding to user queries.
-# This is a list of files or directories within the formation directory.
+# Sources are local (path) or remote (url); remote content is mirrored into a
+# runtime-owned cache and then ingested by the same local pipeline.
 # During initialization, the agent will parse the files, create embeddings,
 # and store the information in its long-term, context-aware memory.
-# 
-# >>> ALL paths are relative to formation directory root (absolute paths NOT allowed) <<<
+#
+# >>> ALL local paths are relative to formation directory root (absolute paths NOT allowed) <<<
 # >>> Recommended: Keep knowledge in knowledge/ subdirectory for organization <<<
-# >>> Future: Remote sources (s3://, https://) will be supported <<<
+# >>> Remote url schemes: http(s)://, s3://, gs://, az://, rsync://, rsync+ssh://,
+#     ftp://, sftp://, file:// -- see SCHEMA_GUIDE.md "Knowledge Configuration" for
+#     auth types, filters, limits, archive extraction, and re-sync scheduling <<<
 knowledge:
   enabled: false  # Whether to use knowledge base
   sources:
@@ -62,6 +65,18 @@ knowledge:
     description: "Information about our product catalog"
   - path: "docs/pricing.txt"
     description: "Pricing information (can be anywhere in formation dir)"
+  # - url: "s3://my-bucket/docs/*.pdf"     # remote source (synced mirror)
+  #   description: "Product documentation"
+  #   id: product-docs                     # optional; derived from url when absent
+  #   auth:
+  #     type: aws                          # scheme-appropriate; omit keys for the
+  #     access_key: "${{ secrets.AWS_ACCESS_KEY }}"   # ambient credential chain
+  #     secret_key: "${{ secrets.AWS_SECRET_KEY }}"
+  #   schedule: "@daily"                   # cron or @startup/@hourly/@daily/@weekly;
+  #                                        # periodic re-sync needs the scheduler
+  # reasoning_threshold: 50000  # tokens; sources at/above get tree indexing (0 = off)
+  # tree:                       # reasoning-RAG tree tuning (closed key set)
+  #   model: "smart"            # tree-build model (alias or provider/model)
 
 # Agent-specific skills (optional)
 # Skills declared here are private to this agent only.
