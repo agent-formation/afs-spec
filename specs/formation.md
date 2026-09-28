@@ -469,17 +469,17 @@ Enables scheduled jobs created from natural language ("remind me every weekday a
 scheduler:
   enabled: true
   timezone: "UTC"             # IANA name; the default timezone for schedules
-  default_time: "09:00"       # used when a schedule names no time
+  default_time: "09:00"       # used when a schedule names no time; quote it (YAML reads an unquoted 21:15 as a number)
   check_interval_minutes: 1
   max_concurrent_jobs: 10
   max_failures_before_pause: 3
 ```
 
 Rules:
-- **Timezone.** A job's schedule is read, and fired, in the requesting user's own timezone when they have set one; otherwise in `scheduler.timezone`. Each job keeps the timezone it was created in, including across daylight-saving changes.
-- **Default time.** `default_time` applies only when a schedule names no time: time-less recurring schedules ("daily", "every weekday", "every Monday", "every N days", "monthly" on the 1st) and date-only one-time schedules ("tomorrow"). "Weekly" with no day means Monday. It never applies to interval schedules ("every 15 minutes", "hourly"). It accepts 24-hour ("08:30") or 12-hour ("8:30am") forms; an invalid value fails formation load. Unset, it is `09:00`.
+- **Timezone.** A job requested by a user is read, and fired, in that user's own timezone when they have set one; otherwise in `scheduler.timezone`. Jobs created through an administrative API use `scheduler.timezone`. Each job keeps the timezone it was created in, across daylight-saving changes; changing a personal timezone later does not move existing jobs.
+- **Default time.** `default_time` applies only when a schedule names no time: time-less recurring schedules ("daily", "every weekday", "every Monday", "every N days", "monthly" on the 1st) and date-only one-time schedules ("tomorrow"). "Weekly" with no day means Monday. It never applies to interval schedules ("every 15 minutes", "hourly"). It accepts 24-hour ("08:30", "21:15") or 12-hour ("8:30am", "9am") forms; any other value, including an empty one, fails formation load. Unset, it is `09:00`.
 - **Conflicting schedules are not defaulted.** A schedule that states both an interval and a clock time ("every 15 minutes at 9am") is not flattened into one of them; it is interpreted as a whole or refused.
-- **Confirmation.** A runtime confirming a new job should state when it will run, in plain words and with the timezone used, and says when the default time was applied.
+- **Confirmation.** A runtime confirming a new job should state when it will run, in plain words and with the timezone used, and should say when it applied the default time.
 - **Failure.** When a schedule cannot be interpreted, or the service that interprets it is unavailable, the runtime tells the user so and creates no job; it never substitutes a guessed time.
 
 ## 7. Coding-agent delegation (`coding:`)

@@ -586,7 +586,7 @@ logging:
 scheduler:
   enabled: true                     # Enable/disable the scheduler service
   timezone: "UTC"                   # Default timezone for schedules; a user's own timezone, when set, takes precedence for that user's jobs
-  default_time: "09:00"             # Time used when a schedule names none ("daily", "every Monday", "tomorrow"); "08:30" or "8:30am" forms; default "09:00"
+  default_time: "09:00"             # Time used when a schedule names none ("daily", "every Monday", "tomorrow"); "08:30", "21:15", "8:30am" or "9am"; quote it; default "09:00"
   check_interval_minutes: 1         # Check for due jobs every N minutes
   max_concurrent_jobs: 10           # Maximum concurrent job executions
   max_failures_before_pause: 3      # Auto-pause jobs after N consecutive failures
