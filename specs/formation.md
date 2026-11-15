@@ -156,7 +156,7 @@ Each trigger is exposed by id at:
 POST /v1/triggers/{id}
 ```
 
-authenticated with the formation's client key; the request then traverses the request middleware + RBAC pipeline (§5) like every other route. Runtimes should also expose `GET /v1/triggers` (list) and `GET /v1/triggers/{id}` (metadata).
+authenticated with the formation's client key, or with the trigger's own `auth` check (below); the request then traverses the request middleware + RBAC pipeline (§5) like every other route. Runtimes should also expose `GET /v1/triggers` (list) and `GET /v1/triggers/{id}` (metadata).
 
 Frontmatter keys (closed set — unknown keys are a load error):
 
@@ -169,6 +169,7 @@ Frontmatter keys (closed set — unknown keys are a load error):
 | `transformer` | string | Name of a transformer (§2.8) to format the outbound payload |
 | `model` | string | Model override for this trigger's turn: alias or `provider/model` (§4.1) |
 | `channel` | string | Names the inbound channel for source tracking; feeds proactive "last channel" routing (§6) |
+| `auth` | string (path or http(s) URL) | The trigger's own auth check, for callers that cannot send the client key (below) |
 
 `parse:` extracts fields from the inbound POST payload. Allowed keys: `message`, `user_id`, `files` (each a JSONPath string such as `$.event.text`) and `context` (a mapping of name → JSONPath for platform-specific values, e.g. `channel: $.event.channel`). Extraction is best-effort; a missing path yields no value rather than an error.
 
@@ -183,6 +184,16 @@ The body (after the frontmatter) is a markdown instruction template. `${{ data.*
 | both | The transformer formats the payload; the trigger's `webhook:` URL is the delivery destination (trigger URL wins) |
 
 A trigger that references a transformer where neither the trigger's `webhook:` nor the transformer's `endpoint.url` provides a destination **must** fail at formation load.
+
+**Per-trigger auth.** Webhook providers (Stripe, HubSpot, ...) cannot send the formation's client key; they sign their requests instead. `auth:` names a check that decides whether a request may run the trigger. The value is a script path, resolved relative to the formation directory when relative, or an http(s) URL.
+
+- **Load time.** Runtimes **must** fail the formation load, naming the trigger and the target, when a script does not exist or is not executable, when a URL gives no HTTP response at all (any HTTP status counts as reachable), or when the value is neither a path nor an http(s) URL. Only `auth` is checked at load; other trigger problems keep their existing behavior.
+- **The check.** On `POST /v1/triggers/{id}`, the runtime passes the check one JSON document: `trigger` (the id), `method`, `url`, `headers` (lowercase names) and `body` (base64 of the exact request bytes, since provider signatures are computed over them). A script receives it on stdin with the runtime's environment and passes on exit code 0. A URL receives it as a POST and passes on any 2xx. The check **must** fail closed: an error, a timeout or an unreachable target is a fail. The runtime contains no provider-specific logic; all of it lives in the check.
+- **Pass.** The request runs as if authenticated with the client key. The raw body becomes `data`: a JSON object as-is, any other body as `{"body": "<text>"}`. The run is async in its own session, and any caller-supplied user id is ignored (the request middleware, §5, may still set identity).
+- **Fail.** The request is handled exactly as one without the client key would be, so the caller cannot tell a failed check from a missing key.
+- **Key callers.** A request that carries the valid client key **must** skip the check and behave exactly as for a trigger without `auth`. This is how stored events are replayed, since a signature cannot pass twice.
+
+A trigger without `auth` behaves exactly as before.
 
 See `schemas/triggers/` for the annotated template.
 
