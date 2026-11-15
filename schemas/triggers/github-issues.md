@@ -32,6 +32,14 @@ parse:
 # Referencing a transformer with no URL from either side is a load error.
 transformer: slack                   # transformers/slack.yaml or bundled template
 webhook: "${{ secrets.OPS_SLACK_WEBHOOK }}"
+
+# Own auth check, for callers that cannot send the client key (GitHub signs
+# each delivery with X-Hub-Signature-256 instead). A script path (relative to
+# the formation directory, must be executable) or an http(s) URL. It receives
+# the whole request as JSON and answers pass (exit 0 / 2xx) or fail. Without
+# this key the trigger requires the client key, as before. Commented out
+# here because the template ships no script, and a missing script fails the load.
+# auth: ./auth/github.py
 ---
 
 A new GitHub issue arrived in ${{ data.repository.full_name }}.
